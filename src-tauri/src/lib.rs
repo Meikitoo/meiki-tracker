@@ -96,7 +96,6 @@ pub fn run() {
             commands::update_session,
             commands::delete_session,
             commands::set_tracking_paused,
-            commands::get_startup_settings,
             commands::set_autostart,
             commands::set_notifications,
             commands::get_settings,

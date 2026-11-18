@@ -1,7 +1,7 @@
 {
   "name": "meiki-tracker",
-  "version": "0.1.0",
-  "description": "",
+  "version": "1.0.0",
+  "description": "Meiki Tracker — suivi du temps de jeu, 100 % local",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
@@ -12,7 +12,7 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri"
   },
-  "license": "MIT",
+  "private": true,
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
     "@fontsource/rajdhani": "^5.3.0",

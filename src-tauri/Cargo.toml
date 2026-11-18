@@ -1,6 +1,6 @@
 [package]
 name = "meiki-tracker"
-version = "0.1.0"
+version = "1.0.0"
 description = "Suivi du temps de jeu, 100 % local"
 authors = ["Meikitoow"]
 edition = "2024"

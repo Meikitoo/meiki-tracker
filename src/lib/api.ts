@@ -170,16 +170,6 @@ export const setTrackingPaused = (paused: boolean) => mutate("set_tracking_pause
 export const setAutostart = (enabled: boolean) => mutate("set_autostart", { enabled });
 export const setNotifications = (enabled: boolean) => mutate("set_notifications", { enabled });
 
-export interface StartupSettings {
-  autostart: boolean;
-  notifications: boolean;
-}
-
-export async function getStartupSettings(): Promise<StartupSettings> {
-  if (!inTauri) return { autostart: false, notifications: true };
-  return invoke<StartupSettings>("get_startup_settings");
-}
-
 export interface AppSettings {
   checkIntervalSecs: number;
   minSessionSecs: number;

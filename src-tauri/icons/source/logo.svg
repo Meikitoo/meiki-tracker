@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Logo Meiki Tracker : « M » cyan dans un cadre arrondi, fond sombre (thème HUD). -->
+  <rect x="40" y="40" width="944" height="944" rx="190" fill="#0B0D10"/>
+  <rect x="78" y="78" width="868" height="868" rx="160" fill="none" stroke="#22D3EE" stroke-width="56"/>
+  <path d="M292 742 V300 L512 540 L732 300 V742" fill="none" stroke="#22D3EE" stroke-width="108" stroke-linejoin="miter" stroke-miterlimit="4" stroke-linecap="butt"/>
+</svg>
