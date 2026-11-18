@@ -61,7 +61,11 @@ fn main() {
             }
             "processus" => {
                 for p in ProcessScanner::new().candidate_programs() {
-                    println!("{:<40} {}", p.process_name, p.exe_path.unwrap_or_default());
+                    let desc = p.exe_path.as_deref()
+                        .and_then(|e| meiki_tracker_lib::exeinfo::file_description(std::path::Path::new(e)))
+                        .unwrap_or_default();
+                    let kind = if p.windowed { "[fenêtre]" } else { "[fond]   " };
+                    println!("{kind} {:<36} {}", p.process_name, desc);
                 }
             }
             "sessions" => {

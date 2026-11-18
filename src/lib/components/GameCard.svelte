@@ -2,6 +2,8 @@
   import type { GameCard } from "$lib/api";
   import { fmtDuration } from "$lib/format";
   import { t } from "$lib/i18n";
+  import { icons } from "$lib/stores/icons.svelte";
+  import GameIcon from "./GameIcon.svelte";
 
   let {
     game,
@@ -16,12 +18,11 @@
   // Sans limite hebdo : barre relative au jeu le plus joué de la semaine.
   const ratio = $derived(limit ? week / limit : weekRef > 0 ? week / weekRef : 0);
   const nearLimit = $derived(limit !== null && ratio >= 0.9);
-  const initial = $derived(game.name.trim().charAt(0).toUpperCase() || "?");
 </script>
 
 <a class="card" class:live={game.live} href={`/jeu?id=${game.id}`}>
   <div class="head">
-    <div class="icon title" aria-hidden="true">{initial}</div>
+    <GameIcon src={icons.get(game.id)} name={game.name} />
     <div class="ident">
       <div class="name" title={game.name}>{game.name}</div>
       <div class="exe" title={game.processName}>{game.processName}</div>
@@ -74,17 +75,6 @@
     align-items: center;
     gap: 12px;
     min-width: 0;
-  }
-  .icon {
-    width: 44px;
-    height: 44px;
-    flex-shrink: 0;
-    border-radius: var(--radius);
-    background: var(--accent-bg);
-    color: var(--accent);
-    display: grid;
-    place-items: center;
-    font-size: 22px;
   }
   .ident {
     min-width: 0;

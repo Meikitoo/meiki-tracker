@@ -1,6 +1,19 @@
 // Données factices, utilisées UNIQUEMENT quand l'interface est ouverte dans un
 // navigateur (hors appli), pour travailler le design. Jamais dans l'appli réelle.
-import type { Library } from "./api";
+import type { Library, ProgramCandidate } from "./api";
+
+export function mockPrograms(includeBackground: boolean): ProgramCandidate[] {
+  const list: ProgramCandidate[] = [
+    { processName: "cod.exe", exePath: "C:\\Call of Duty\\_retail_\\cod.exe", displayName: "Call of Duty", icon: null, windowed: true, alreadyTracked: true },
+    { processName: "Discord.exe", exePath: null, displayName: "Discord", icon: null, windowed: true, alreadyTracked: false },
+    { processName: "obs64.exe", exePath: null, displayName: "OBS Studio", icon: null, windowed: true, alreadyTracked: false },
+    { processName: "VALORANT-Win64-Shipping.exe", exePath: null, displayName: "VALORANT", icon: null, windowed: true, alreadyTracked: false },
+  ];
+  if (includeBackground) {
+    list.push({ processName: "GameLoopService.exe", exePath: null, displayName: "GameLoopService", icon: null, windowed: false, alreadyTracked: false });
+  }
+  return list;
+}
 
 export function mockLibrary(): Library {
   const now = Math.floor(Date.now() / 1000);

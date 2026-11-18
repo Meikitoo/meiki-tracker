@@ -3,6 +3,7 @@
 pub mod commands;
 pub mod db;
 pub mod exclusions;
+pub mod exeinfo;
 pub mod library;
 pub mod service;
 pub mod settings;
@@ -21,6 +22,8 @@ pub const EVENT_TICK: &str = "tracker-tick"; // à chaque vérification → chro
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .manage(commands::ExeCache::default())
         .setup(|app| {
             let path = db::default_db_path();
             // Ouvrir la base ici d'abord garantit que le schéma existe avant le thread de suivi.
@@ -48,7 +51,13 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![commands::get_library])
+        .invoke_handler(tauri::generate_handler![
+            commands::get_library,
+            commands::list_running_programs,
+            commands::describe_exe,
+            commands::add_game,
+            commands::get_game_icon,
+        ])
         .run(tauri::generate_context!())
         .expect("Erreur au lancement de Meiki Tracker");
 }

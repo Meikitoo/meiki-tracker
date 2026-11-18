@@ -54,12 +54,62 @@ export interface LiveTick {
 export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 export async function getLibrary(): Promise<Library> {
-  if (!inTauri) {
-    // Aperçu navigateur en développement seulement ; retiré de la version finale.
-    if (import.meta.env.DEV) return (await import("./mock")).mockLibrary();
-    throw new Error("Meiki Tracker doit être lancé comme application.");
-  }
+  // Hors appli : aperçu navigateur en développement seulement (retiré de la version finale).
+  if (!inTauri) return (await mock()).mockLibrary();
   return invoke<Library>("get_library");
+}
+
+export interface ProgramCandidate {
+  processName: string;
+  exePath: string | null;
+  displayName: string;
+  icon: string | null;
+  windowed: boolean;
+  alreadyTracked: boolean;
+}
+
+export type Category = "game" | "creation";
+
+export interface NewGame {
+  processName: string;
+  name: string;
+  category: Category;
+  baselineSecs: number;
+  exePath: string | null;
+}
+
+async function mock() {
+  if (!import.meta.env.DEV) throw new Error("Meiki Tracker doit être lancé comme application.");
+  return import("./mock");
+}
+
+export async function listRunningPrograms(includeBackground: boolean): Promise<ProgramCandidate[]> {
+  if (!inTauri) return (await mock()).mockPrograms(includeBackground);
+  return invoke<ProgramCandidate[]>("list_running_programs", { includeBackground });
+}
+
+/** Ouvre le sélecteur de fichier Windows et renvoie les infos du .exe choisi (ou null si annulé). */
+export async function browseExe(dialogTitle: string): Promise<ProgramCandidate | null> {
+  if (!inTauri) return (await mock()).mockPrograms(false)[0];
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const path = await open({
+    title: dialogTitle,
+    multiple: false,
+    directory: false,
+    filters: [{ name: "Programme", extensions: ["exe"] }],
+  });
+  if (!path) return null;
+  return invoke<ProgramCandidate>("describe_exe", { path });
+}
+
+export async function addGame(game: NewGame): Promise<{ id: number; restored: boolean }> {
+  if (!inTauri) return { id: 99, restored: false };
+  return invoke("add_game", { game });
+}
+
+export async function getGameIcon(id: number): Promise<string | null> {
+  if (!inTauri) return null;
+  return invoke<string | null>("get_game_icon", { id });
 }
 
 export async function onTrackerChanged(cb: () => void): Promise<UnlistenFn> {

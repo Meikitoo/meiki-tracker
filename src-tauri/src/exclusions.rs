@@ -14,6 +14,7 @@ const EXCLUDED: &[&str] = &[
     "riotclientuxrender.exe", "riotclientcrashhandler.exe", "leagueclient.exe",
     "leagueclientux.exe", "leagueclientuxrender.exe", "rockstarservice.exe",
     "launcher.exe", "socialclubhelper.exe", "playnite.desktopapp.exe",
+    "bootstrapper.exe", "codbrokerservice.exe", "blizzard update agent.exe",
     "xboxpcapp.exe", "xboxappservices.exe", "gamingservices.exe", "gamingservicesnet.exe",
     "gamebar.exe", "gamebarftserver.exe", "gamebarpresencewriter.exe",
     "amazon games ui.exe", "itch.exe", "heroic.exe",
@@ -58,7 +59,9 @@ pub fn is_excluded(process_name: &str) -> bool {
     let name = process_name.to_lowercase();
     EXCLUDED.contains(&name.as_str())
         || name.contains("crashhandler")
+        || name.contains("crashpad")
         || name.ends_with("crashreporter.exe")
+        || name.ends_with("svc.exe")
         || name.contains("updater")
         || name.starts_with("unins")
 }
@@ -75,6 +78,9 @@ mod tests {
         assert!(is_excluded("svchost.exe"));
         assert!(is_excluded("UnityCrashHandler64.exe"));
         assert!(is_excluded("Discord_Updater.exe"));
+        assert!(is_excluded("crashpad_handler.exe"));
+        assert!(is_excluded("CODBrokerService.exe"));
+        assert!(is_excluded("cowork-svc.exe"));
     }
 
     #[test]

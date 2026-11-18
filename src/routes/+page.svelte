@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AddGameDialog from "$lib/components/AddGameDialog.svelte";
   import GameCard from "$lib/components/GameCard.svelte";
   import LiveBanner from "$lib/components/LiveBanner.svelte";
   import StatTile from "$lib/components/StatTile.svelte";
@@ -27,6 +28,7 @@
   }
 
   const data = $derived(library.data);
+  let adding = $state(false);
 
   // Temps des sessions en cours, à ajouter aux totaux (le backend ne les compte pas).
   function liveSecsFor(gameId: number): number {
@@ -64,11 +66,13 @@
     <h1>{t.library.title}</h1>
     <p class="count">{t.library.count(data?.games.length ?? 0)}</p>
   </div>
-  <button class="btn btn-primary add" type="button" title={t.library.addSoon}>
+  <button class="btn btn-primary add" type="button" onclick={() => (adding = true)}>
     <span class="plus" aria-hidden="true">+</span>
     {t.library.add}
   </button>
 </header>
+
+<AddGameDialog bind:open={adding} onadded={() => library.refresh()} />
 
 {#if library.error && !data}
   <div class="state">

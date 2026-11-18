@@ -12,6 +12,8 @@ use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 pub struct RunningProgram {
     pub process_name: String,
     pub exe_path: Option<String>,
+    /// A une fenêtre visible (application) — sinon processus d'arrière-plan.
+    pub windowed: bool,
 }
 
 pub struct ProcessScanner {
@@ -53,27 +55,31 @@ impl ProcessScanner {
             true,
             ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet),
         );
-        let mut seen = HashSet::new();
-        let mut out: Vec<RunningProgram> = sys
-            .processes()
-            .values()
-            .filter_map(|p| {
-                let name = p.name().to_string_lossy().to_string();
-                let exe = p.exe().map(|e| e.to_string_lossy().to_string());
-                let lower = name.to_lowercase();
-                let in_windows_dir = exe
-                    .as_deref()
-                    .is_some_and(|e| e.to_lowercase().starts_with(r"c:\windows\"));
-                if !lower.ends_with(".exe")
-                    || crate::exclusions::is_excluded(&lower)
-                    || in_windows_dir
-                    || !seen.insert(lower)
-                {
-                    return None;
-                }
-                Some(RunningProgram { process_name: name, exe_path: exe })
-            })
-            .collect();
+        let windowed = crate::exeinfo::windowed_pids();
+        // Un même programme peut avoir plusieurs processus : on fusionne par nom.
+        let mut by_name: std::collections::HashMap<String, RunningProgram> = Default::default();
+        for p in sys.processes().values() {
+            let name = p.name().to_string_lossy().to_string();
+            let exe = p.exe().map(|e| e.to_string_lossy().to_string());
+            let lower = name.to_lowercase();
+            let in_windows_dir = exe
+                .as_deref()
+                .is_some_and(|e| e.to_lowercase().starts_with(r"c:\windows\"));
+            if !lower.ends_with(".exe") || crate::exclusions::is_excluded(&lower) || in_windows_dir {
+                continue;
+            }
+            let has_window = windowed.contains(&p.pid().as_u32());
+            let entry = by_name.entry(lower).or_insert(RunningProgram {
+                process_name: name,
+                exe_path: None,
+                windowed: false,
+            });
+            entry.windowed |= has_window;
+            if entry.exe_path.is_none() {
+                entry.exe_path = exe;
+            }
+        }
+        let mut out: Vec<RunningProgram> = by_name.into_values().collect();
         out.sort_by_key(|p| p.process_name.to_lowercase());
         out
     }

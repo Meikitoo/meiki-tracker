@@ -159,6 +159,61 @@ pub fn add_game(
     Ok(conn.last_insert_rowid())
 }
 
+/// Résultat d'un ajout depuis l'interface.
+#[derive(Debug, PartialEq)]
+pub enum AddOutcome {
+    Added(i64),
+    /// Le jeu avait été retiré : on le réactive avec son historique.
+    Restored(i64),
+    AlreadyTracked(i64),
+}
+
+/// Ajout complet (avec icône). Un jeu retiré auparavant est réactivé, sessions comprises.
+pub fn add_or_restore_game(
+    conn: &Connection,
+    name: &str,
+    process_name: &str,
+    category: &str,
+    baseline_secs: i64,
+    icon_png: Option<&[u8]>,
+) -> Result<AddOutcome> {
+    let existing: Option<(i64, bool)> = conn
+        .query_row(
+            "SELECT id, archived FROM games WHERE process_name = ?1",
+            [process_name.to_lowercase()],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    let now = now();
+    let baseline_set_at = (baseline_secs > 0).then_some(now);
+    match existing {
+        Some((id, false)) => Ok(AddOutcome::AlreadyTracked(id)),
+        Some((id, true)) => {
+            conn.execute(
+                "UPDATE games SET name = ?2, category = ?3, baseline_secs = ?4, baseline_set_at = ?5,
+                 icon_png = COALESCE(?6, icon_png), archived = 0 WHERE id = ?1",
+                params![id, name, category, baseline_secs, baseline_set_at, icon_png],
+            )?;
+            Ok(AddOutcome::Restored(id))
+        }
+        None => {
+            conn.execute(
+                "INSERT INTO games (name, process_name, category, baseline_secs, baseline_set_at, icon_png, added_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![name, process_name.to_lowercase(), category, baseline_secs, baseline_set_at, icon_png, now],
+            )?;
+            Ok(AddOutcome::Added(conn.last_insert_rowid()))
+        }
+    }
+}
+
+pub fn game_icon(conn: &Connection, id: i64) -> Result<Option<Vec<u8>>> {
+    Ok(conn
+        .query_row("SELECT icon_png FROM games WHERE id = ?1", [id], |r| r.get(0))
+        .optional()?
+        .flatten())
+}
+
 /// Jeux suivis (non archivés).
 pub fn active_games(conn: &Connection) -> Result<Vec<Game>> {
     let mut stmt = conn.prepare(&format!(
@@ -325,4 +380,28 @@ pub fn set_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
         params![key, value],
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ajout_doublon_et_reactivation() {
+        let c = open_in_memory().unwrap();
+        let png = [1u8, 2, 3];
+        let AddOutcome::Added(id) = add_or_restore_game(&c, "COD", "Cod.exe", "game", 3600, Some(&png)).unwrap() else {
+            panic!("devait être ajouté");
+        };
+        assert_eq!(game_icon(&c, id).unwrap(), Some(png.to_vec()));
+        assert_eq!(get_game(&c, id).unwrap().unwrap().process_name, "cod.exe");
+        assert_eq!(add_or_restore_game(&c, "COD", "COD.EXE", "game", 0, None).unwrap(), AddOutcome::AlreadyTracked(id));
+
+        c.execute("UPDATE games SET archived = 1 WHERE id = ?1", [id]).unwrap();
+        assert!(active_games(&c).unwrap().is_empty());
+        assert_eq!(add_or_restore_game(&c, "Call of Duty", "cod.exe", "game", 0, None).unwrap(), AddOutcome::Restored(id));
+        let g = get_game(&c, id).unwrap().unwrap();
+        assert_eq!((g.name.as_str(), g.archived, g.baseline_secs), ("Call of Duty", false, 0));
+        assert_eq!(game_icon(&c, id).unwrap(), Some(png.to_vec()), "icône conservée");
+    }
 }
