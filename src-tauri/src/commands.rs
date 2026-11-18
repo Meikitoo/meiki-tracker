@@ -179,6 +179,15 @@ pub async fn add_game(game: NewGame, app: AppHandle, db: State<'_, AppDb>) -> Re
         AddOutcome::Restored(id) => AddResult { id, restored: true },
         AddOutcome::AlreadyTracked(_) => return Err("Ce jeu est déjà dans ta bibliothèque.".into()),
     };
+    // Jeu installé par Steam : on le lie tout seul (lecture locale des fichiers de Steam).
+    if let Some(exe) = game.exe_path.as_deref() {
+        if let Some(appid) = crate::steam::appid_for_exe(Path::new(exe), &crate::steam::installed_games()) {
+            let conn = db.0.lock().map_err(err)?;
+            if crate::steam::game_appid(&conn, result.id).ok().flatten().is_none() {
+                let _ = crate::steam::set_game_appid(&conn, result.id, Some(appid));
+            }
+        }
+    }
     let _ = app.emit(crate::EVENT_CHANGED, ());
     Ok(result)
 }
@@ -393,4 +402,154 @@ pub async fn get_overview(db: State<'_, AppDb>) -> Result<crate::detail::Overvie
 pub async fn get_game_icon(id: i64, db: State<'_, AppDb>) -> Result<Option<String>, String> {
     let conn = db.0.lock().map_err(err)?;
     Ok(db::game_icon(&conn, id).map_err(err)?.map(|png| exeinfo::png_data_url(&png)))
+}
+
+// ------------------------------------------------------------------ Succès Steam (option)
+
+use crate::steam;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteamSettingsView {
+    pub enabled: bool,
+    pub has_key: bool,
+    /// 4 derniers caractères de la clé enregistrée (jamais la clé entière).
+    pub key_hint: Option<String>,
+    pub steam_id: Option<String>,
+    /// Compte trouvé localement dans Steam (sans Internet).
+    pub detected: Option<steam::SteamAccount>,
+    pub last_sync_at: Option<i64>,
+    pub linked_games: i64,
+}
+
+#[tauri::command]
+pub async fn get_steam_settings(db: State<'_, AppDb>) -> Result<SteamSettingsView, String> {
+    let detected = steam::detect_account();
+    let conn = db.0.lock().map_err(err)?;
+    let c = steam::config(&conn).map_err(err)?;
+    let linked_games = conn
+        .query_row("SELECT COUNT(*) FROM games WHERE archived = 0 AND steam_appid IS NOT NULL", [], |r| r.get(0))
+        .map_err(err)?;
+    Ok(SteamSettingsView {
+        enabled: c.enabled,
+        has_key: c.api_key.is_some(),
+        key_hint: c.api_key.as_deref().map(|k| k.chars().skip(k.len().saturating_sub(4)).collect()),
+        steam_id: c.steam_id,
+        detected,
+        last_sync_at: db::get_setting(&conn, steam::KEY_LAST_SYNC).map_err(err)?.and_then(|v| v.parse().ok()),
+        linked_games,
+    })
+}
+
+/// Active / désactive la synchronisation (désactivée : plus aucun accès à Internet).
+#[tauri::command]
+pub async fn set_steam_enabled(enabled: bool, db: State<'_, AppDb>) -> Result<(), String> {
+    let conn = db.0.lock().map_err(err)?;
+    db::set_setting(&conn, steam::KEY_ENABLED, if enabled { "true" } else { "false" }).map_err(err)
+}
+
+/// Vérifie la clé et le compte auprès de Steam, puis les enregistre.
+/// `api_key = None` : garder la clé déjà enregistrée.
+#[tauri::command]
+pub async fn save_steam_account(api_key: Option<String>, steam_id: String, db: State<'_, AppDb>) -> Result<steam::AccountCheck, String> {
+    let steam_id = steam_id.trim().to_string();
+    if !steam::valid_steam_id(&steam_id) {
+        return Err("Identifiant Steam invalide : c'est un nombre de 17 chiffres qui commence par 7656119.".into());
+    }
+    let key = match api_key.map(|k| k.trim().to_string()).filter(|k| !k.is_empty()) {
+        Some(k) if steam::valid_api_key(&k) => k.to_uppercase(),
+        Some(_) => return Err("Clé API invalide : elle fait 32 caractères (chiffres et lettres A à F).".into()),
+        None => {
+            let conn = db.0.lock().map_err(err)?;
+            steam::config(&conn).map_err(err)?.api_key.ok_or("Colle ta clé API Steam.")?
+        }
+    };
+    {
+        let conn = db.0.lock().map_err(err)?;
+        if !steam::config(&conn).map_err(err)?.enabled {
+            return Err("Active d'abord la synchronisation des succès Steam.".into());
+        }
+    }
+    // Appel réseau sans tenir la base.
+    let check = steam::check_account(&key, &steam_id)?;
+    let conn = db.0.lock().map_err(err)?;
+    db::set_setting(&conn, steam::KEY_API_KEY, &key).map_err(err)?;
+    db::set_setting(&conn, steam::KEY_STEAM_ID, &steam_id).map_err(err)?;
+    Ok(check)
+}
+
+/// Oublie la clé et le compte, et désactive la synchronisation.
+/// Les succès déjà récupérés restent affichés.
+#[tauri::command]
+pub async fn forget_steam_account(db: State<'_, AppDb>) -> Result<(), String> {
+    let conn = db.0.lock().map_err(err)?;
+    conn.execute("DELETE FROM settings WHERE key IN (?1, ?2)", [steam::KEY_API_KEY, steam::KEY_STEAM_ID])
+        .map_err(err)?;
+    db::set_setting(&conn, steam::KEY_ENABLED, "false").map_err(err)?;
+    // Efface aussi les anciennes pages de la base qui contenaient la clé.
+    let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); VACUUM;");
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn steam_sync_all(app: AppHandle) -> Result<steam::SyncAllResult, String> {
+    let r = steam::sync_all(&db::default_db_path())?;
+    let _ = app.emit(crate::EVENT_CHANGED, ());
+    Ok(r)
+}
+
+#[tauri::command]
+pub async fn steam_sync_game(id: i64, app: AppHandle) -> Result<steam::SyncResult, String> {
+    let r = steam::sync_game(&db::default_db_path(), id)?;
+    let _ = app.emit(crate::EVENT_CHANGED, ());
+    Ok(r)
+}
+
+#[tauri::command]
+pub async fn get_achievements(id: i64, db: State<'_, AppDb>) -> Result<steam::AchievementsView, String> {
+    let conn = db.0.lock().map_err(err)?;
+    steam::view(&conn, id).map_err(err)
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteamLinkCandidates {
+    /// Jeu Steam installé qui contient le .exe de ce jeu, s'il y en a un.
+    pub detected: Option<u32>,
+    pub installed: Vec<steam::InstalledGame>,
+}
+
+/// Jeux Steam installés sur ce PC (lecture locale, sans Internet).
+#[tauri::command]
+pub async fn steam_link_candidates(id: i64, db: State<'_, AppDb>) -> Result<SteamLinkCandidates, String> {
+    let process = {
+        let conn = db.0.lock().map_err(err)?;
+        db::get_game(&conn, id).map_err(err)?.ok_or("Jeu introuvable.")?.process_name
+    };
+    let installed = steam::installed_games();
+    let detected = steam::appid_for_process(&process, &installed);
+    Ok(SteamLinkCandidates { detected, installed })
+}
+
+/// Lie un jeu à Steam (`appid = None` : délier). Renvoie le résultat de la première
+/// synchronisation si elle est activée ; le lien reste enregistré même si elle échoue.
+#[tauri::command]
+pub async fn link_steam_game(id: i64, appid: Option<u32>, app: AppHandle, db: State<'_, AppDb>) -> Result<Option<steam::SyncResult>, String> {
+    if appid == Some(0) {
+        return Err("Numéro de jeu Steam invalide.".into());
+    }
+    let enabled = {
+        let conn = db.0.lock().map_err(err)?;
+        if !steam::set_game_appid(&conn, id, appid).map_err(err)? {
+            return Err("Jeu introuvable.".into());
+        }
+        steam::config(&conn).map_err(err)?.enabled
+    };
+    let _ = app.emit(crate::EVENT_CHANGED, ());
+    if appid.is_none() || !enabled {
+        return Ok(None);
+    }
+    let r = steam::sync_game(&db::default_db_path(), id)?;
+    let _ = app.emit(crate::EVENT_CHANGED, ());
+    Ok(Some(r))
 }

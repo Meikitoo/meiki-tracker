@@ -1,6 +1,6 @@
 {
   "name": "meiki-tracker",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Meiki Tracker — suivi du temps de jeu, 100 % local",
   "type": "module",
   "scripts": {
@@ -17,7 +17,8 @@
     "@fontsource/inter": "^5.3.0",
     "@fontsource/rajdhani": "^5.3.0",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-dialog": "^2.8.4"
+    "@tauri-apps/plugin-dialog": "^2.8.4",
+    "@tauri-apps/plugin-opener": "^2.7.3"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.10",

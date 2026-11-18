@@ -99,7 +99,7 @@ pub fn on_close_requested(app: &AppHandle) {
     }
 }
 
-fn notify(app: &AppHandle, title: &str, body: &str) {
+pub(crate) fn notify(app: &AppHandle, title: &str, body: &str) {
     let _ = app.notification().builder().title(title).body(body).show();
 }
 
@@ -127,8 +127,66 @@ pub fn on_tracker_events(app: &AppHandle, conn: &Connection, events: &[TrackerEv
                     notify(app, "Session terminée", &body);
                 }
             }
+            // Jeu Steam fermé : on récupère les succès gagnés pendant la partie.
+            spawn_steam_game_sync(app, conn, *game_id);
         }
     }
+}
+
+/// Synchro des succès d'un jeu juste fermé (si l'option est activée et le jeu lié).
+fn spawn_steam_game_sync(app: &AppHandle, conn: &Connection, game_id: i64) {
+    let enabled = crate::steam::config(conn).map(|c| c.enabled).unwrap_or(false);
+    let linked = crate::steam::game_appid(conn, game_id).ok().flatten().is_some();
+    if !enabled || !linked {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        // Laisse à Steam le temps d'enregistrer les derniers succès.
+        std::thread::sleep(std::time::Duration::from_secs(30));
+        match crate::steam::sync_game(&db::default_db_path(), game_id) {
+            Ok(r) => {
+                let _ = app.emit(crate::EVENT_CHANGED, ());
+                if r.new_unlocked > 0 {
+                    let conn = db::open(&db::default_db_path());
+                    let notifications = conn.as_ref().ok().and_then(|c| Settings::load(c).ok()).map(|s| s.notifications).unwrap_or(true);
+                    let name = conn.ok().and_then(|c| db::get_game(&c, game_id).ok().flatten()).map(|g| g.name).unwrap_or_default();
+                    if notifications {
+                        let body = if r.new_unlocked == 1 {
+                            format!("{name} : 1 nouveau succès débloqué ({}/{})", r.unlocked, r.total)
+                        } else {
+                            format!("{name} : {} nouveaux succès débloqués ({}/{})", r.new_unlocked, r.unlocked, r.total)
+                        };
+                        notify(&app, "Succès Steam", &body);
+                    }
+                }
+            }
+            Err(e) => eprintln!("[steam] synchro après la partie impossible : {e}"),
+        }
+    });
+}
+
+/// Au lancement de l'appli : synchro de tous les jeux liés, au plus une fois toutes les 12 h.
+pub fn spawn_steam_startup_sync(app: AppHandle, db_path: std::path::PathBuf) {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(20));
+        let Ok(conn) = db::open(&db_path) else { return };
+        let enabled = crate::steam::config(&conn).map(|c| c.enabled && c.api_key.is_some() && c.steam_id.is_some()).unwrap_or(false);
+        let last: i64 = db::get_setting(&conn, crate::steam::KEY_LAST_SYNC).ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(0);
+        drop(conn);
+        if !enabled || db::now() - last < 12 * 3600 {
+            return;
+        }
+        match crate::steam::sync_all(&db_path) {
+            Ok(r) => {
+                for e in &r.errors {
+                    eprintln!("[steam] {e}");
+                }
+                let _ = app.emit(crate::EVENT_CHANGED, ());
+            }
+            Err(e) => eprintln!("[steam] synchro au démarrage impossible : {e}"),
+        }
+    });
 }
 
 /// Infobulle de l'icône : « Meiki Tracker — En jeu : Call of Duty ».

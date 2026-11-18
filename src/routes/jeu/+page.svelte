@@ -17,6 +17,7 @@
   import Modal from "$lib/components/Modal.svelte";
   import SessionItem from "$lib/components/SessionItem.svelte";
   import StatTile from "$lib/components/StatTile.svelte";
+  import SteamAchievements from "$lib/components/SteamAchievements.svelte";
   import { fmtDate, fmtDay, fmtDuration, fmtTime } from "$lib/format";
   import { t } from "$lib/i18n";
   import { icons } from "$lib/stores/icons.svelte";
@@ -223,6 +224,8 @@
     </div>
     <BarChart days={detail.days} {dailyLimit} todayExtra={liveSecs} />
   </section>
+
+  <SteamAchievements gameId={id} />
 
   <section class="panel">
     <div class="panel-head">

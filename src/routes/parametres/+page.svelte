@@ -13,6 +13,7 @@
     type SettingsView,
   } from "$lib/api";
   import Modal from "$lib/components/Modal.svelte";
+  import SteamSettings from "$lib/components/SteamSettings.svelte";
   import Toggle from "$lib/components/Toggle.svelte";
   import { fmtDate, fmtTime } from "$lib/format";
   import { t } from "$lib/i18n";
@@ -239,6 +240,8 @@
       </div>
     </div>
   </section>
+
+  <SteamSettings />
 
   <section class="panel">
     <h2>{T.privacy}</h2>

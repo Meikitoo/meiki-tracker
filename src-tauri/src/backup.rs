@@ -14,7 +14,19 @@ const AUTO_KEEP: usize = 8;
 const WEEK_SECS: i64 = 7 * 24 * 3600;
 
 /// Réglages propres à ce PC, jamais écrasés par un import.
-const MACHINE_KEYS: &[&str] = &["autostart", "backup_dir", "last_auto_backup_at", "tray_hint_shown"];
+const MACHINE_KEYS: &[&str] = &[
+    "autostart",
+    "backup_dir",
+    "last_auto_backup_at",
+    "tray_hint_shown",
+    crate::steam::KEY_ENABLED,
+    crate::steam::KEY_API_KEY,
+    crate::steam::KEY_STEAM_ID,
+    crate::steam::KEY_LAST_SYNC,
+];
+
+/// Réglages secrets, jamais écrits dans un fichier de sauvegarde.
+const SECRET_KEYS: &[&str] = &[crate::steam::KEY_API_KEY];
 
 /// Écrit une copie complète de la base dans `dest` (remplacée si elle existe).
 pub fn backup_to(conn: &Connection, dest: &Path) -> Result<(), String> {
@@ -26,6 +38,20 @@ pub fn backup_to(conn: &Connection, dest: &Path) -> Result<(), String> {
     }
     conn.execute("VACUUM INTO ?1", [dest.to_string_lossy()])
         .map_err(|e| format!("Sauvegarde impossible : {e}"))?;
+    strip_secrets(dest).map_err(|e| {
+        let _ = std::fs::remove_file(dest);
+        format!("Sauvegarde impossible : {e}")
+    })
+}
+
+/// Retire la clé API Steam de la copie (et efface ses traces dans le fichier).
+fn strip_secrets(dest: &Path) -> rusqlite::Result<()> {
+    let c = Connection::open(dest)?;
+    let keys = SECRET_KEYS.iter().map(|k| format!("'{k}'")).collect::<Vec<_>>().join(",");
+    let removed = c.execute(&format!("DELETE FROM settings WHERE key IN ({keys})"), [])?;
+    if removed > 0 {
+        c.execute_batch("VACUUM")?;
+    }
     Ok(())
 }
 
@@ -83,7 +109,24 @@ pub fn import_from(conn: &mut Connection, src: &Path, now: i64, safety_dir: &Pat
     let safety = safety_dir.join(format!("avant-import-{}.{EXTENSION}", stamp(now, true)));
     backup_to(conn, &safety)?;
 
-    conn.execute("ATTACH DATABASE ?1 AS imp", [src.to_string_lossy()]).map_err(|e| e.to_string())?;
+    // Copie temporaire mise au format actuel (une sauvegarde d'une ancienne version
+    // reçoit ainsi les nouvelles colonnes) : le fichier choisi n'est jamais modifié.
+    let staged = safety_dir.join(format!("import-en-cours-{}.db", stamp(now, true)));
+    std::fs::copy(src, &staged).map_err(|e| format!("Lecture de la sauvegarde impossible : {e}"))?;
+    let cleanup = |p: &Path| {
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", p.to_string_lossy()));
+        }
+    };
+    if let Err(e) = db::open(&staged) {
+        cleanup(&staged);
+        return Err(format!("Ce fichier n'est pas une sauvegarde Meiki Tracker valide ({e})."));
+    }
+    let attached = conn.execute("ATTACH DATABASE ?1 AS imp", [staged.to_string_lossy()]).map_err(|e| e.to_string());
+    if let Err(e) = attached {
+        cleanup(&staged);
+        return Err(e);
+    }
     let result = (|| -> rusqlite::Result<()> {
         let keys = MACHINE_KEYS.iter().map(|k| format!("'{k}'")).collect::<Vec<_>>().join(",");
         let tx = conn.transaction()?;
@@ -93,9 +136,13 @@ pub fn import_from(conn: &mut Connection, src: &Path, now: i64, safety_dir: &Pat
              DELETE FROM games;
              DELETE FROM settings WHERE key NOT IN ({keys});
              INSERT INTO games (id, name, process_name, category, baseline_secs, baseline_set_at,
-                                weekly_limit_secs, icon_png, added_at, archived)
+                                weekly_limit_secs, icon_png, added_at, archived, steam_appid, steam_synced_at)
                SELECT id, name, process_name, category, baseline_secs, baseline_set_at,
-                      weekly_limit_secs, icon_png, added_at, archived FROM imp.games;
+                      weekly_limit_secs, icon_png, added_at, archived, steam_appid, steam_synced_at FROM imp.games;
+             INSERT INTO steam_achievements (game_id, api_name, name, description, hidden, icon_url, icon,
+                                             achieved, unlocked_at, global_percent, sort_order)
+               SELECT game_id, api_name, name, description, hidden, icon_url, icon, achieved,
+                      unlocked_at, global_percent, sort_order FROM imp.steam_achievements;
              INSERT INTO sessions (id, game_id, started_at, ended_at, duration_secs, afk_secs, gap_secs, tag, note)
                SELECT id, game_id, started_at, ended_at, duration_secs, afk_secs, gap_secs, tag, note FROM imp.sessions;
              INSERT OR REPLACE INTO settings (key, value)
@@ -104,6 +151,7 @@ pub fn import_from(conn: &mut Connection, src: &Path, now: i64, safety_dir: &Pat
         tx.commit()
     })();
     let _ = conn.execute("DETACH DATABASE imp", []);
+    cleanup(&staged);
     result.map_err(|e| format!("Import impossible (tes données n'ont pas été modifiées) : {e}"))?;
 
     Ok(ImportSummary { games, sessions, safety_backup: safety.to_string_lossy().to_string() })
@@ -195,6 +243,36 @@ mod tests {
         assert_eq!(db::tracked_secs(&dst, games[0].id).unwrap(), 3600);
         assert_eq!(db::get_setting(&dst, "min_session_secs").unwrap().as_deref(), Some("300"));
         assert_eq!(db::get_setting(&dst, "backup_dir").unwrap().as_deref(), Some("D:/mes-sauvegardes"), "réglage du PC conservé");
+    }
+
+    #[test]
+    fn cle_steam_jamais_exportee_et_ancienne_sauvegarde_importable() {
+        let dir = tmp("steam");
+        let src = db::open(&dir.join("a.db")).unwrap();
+        sample(&src, "cod", 3600);
+        db::set_setting(&src, crate::steam::KEY_API_KEY, "0123456789ABCDEF0123456789ABCDEF").unwrap();
+        let file = dir.join("save.meikibackup");
+        backup_to(&src, &file).unwrap();
+        let bytes = std::fs::read(&file).unwrap();
+        assert!(!bytes.windows(32).any(|w| w == b"0123456789ABCDEF0123456789ABCDEF"), "clé absente du fichier");
+        assert!(db::get_setting(&src, crate::steam::KEY_API_KEY).unwrap().is_some(), "clé gardée dans la vraie base");
+
+        // Sauvegarde au format v1 (avant les succès Steam).
+        let old = dir.join("v1.meikibackup");
+        backup_to(&src, &old).unwrap();
+        let c = Connection::open(&old).unwrap();
+        c.execute_batch("DROP TABLE steam_achievements; ALTER TABLE games DROP COLUMN steam_appid;
+                         ALTER TABLE games DROP COLUMN steam_synced_at; PRAGMA user_version = 1;").unwrap();
+        drop(c);
+        let mut dst = db::open(&dir.join("b.db")).unwrap();
+        db::set_setting(&dst, crate::steam::KEY_API_KEY, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF").unwrap();
+        let s = import_from(&mut dst, &old, 1_000_000, &dir.join("securite")).unwrap();
+        assert_eq!((s.games, s.sessions), (1, 1));
+        assert_eq!(db::get_setting(&dst, crate::steam::KEY_API_KEY).unwrap().as_deref(), Some("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"));
+        let v1 = Connection::open(&old).unwrap();
+        assert_eq!(v1.pragma_query_value(None, "user_version", |r| r.get::<_, i32>(0)).unwrap(), 1, "fichier choisi jamais modifié");
+        let leftovers = std::fs::read_dir(dir.join("securite")).unwrap().filter(|e| e.as_ref().unwrap().file_name().to_string_lossy().starts_with("import-en-cours")).count();
+        assert_eq!(leftovers, 0, "copie temporaire supprimée");
     }
 
     #[test]

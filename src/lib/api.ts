@@ -255,6 +255,82 @@ export async function getOverview(): Promise<Overview> {
   return invoke<Overview>("get_overview");
 }
 
+// ------------------------------------------------------------------ Succès Steam (option)
+
+export interface SteamSettings {
+  enabled: boolean;
+  hasKey: boolean;
+  keyHint: string | null;
+  steamId: string | null;
+  detected: { steamId: string; persona: string } | null;
+  lastSyncAt: number | null;
+  linkedGames: number;
+}
+
+export interface Achievement {
+  apiName: string;
+  name: string;
+  description: string | null;
+  hidden: boolean;
+  icon: string | null;
+  achieved: boolean;
+  unlockedAt: number | null;
+  globalPercent: number | null;
+}
+
+export interface Achievements {
+  enabled: boolean;
+  appid: number | null;
+  syncedAt: number | null;
+  total: number;
+  unlocked: number;
+  items: Achievement[];
+}
+
+export interface SyncResult {
+  total: number;
+  unlocked: number;
+  newUnlocked: number;
+}
+
+export async function getSteamSettings(): Promise<SteamSettings> {
+  if (!inTauri) return { enabled: false, hasKey: false, keyHint: null, steamId: null, detected: null, lastSyncAt: null, linkedGames: 0 };
+  return invoke<SteamSettings>("get_steam_settings");
+}
+export const setSteamEnabled = (enabled: boolean) => mutate("set_steam_enabled", { enabled });
+export const forgetSteamAccount = () => mutate("forget_steam_account", {});
+
+export async function saveSteamAccount(apiKey: string | null, steamId: string): Promise<{ persona: string; public: boolean }> {
+  return invoke("save_steam_account", { apiKey, steamId });
+}
+export async function steamSyncAll(): Promise<{ games: number; newUnlocked: number; errors: string[] }> {
+  return invoke("steam_sync_all");
+}
+export async function steamSyncGame(id: number): Promise<SyncResult> {
+  return invoke("steam_sync_game", { id });
+}
+export async function getAchievements(id: number): Promise<Achievements> {
+  if (!inTauri) return { enabled: false, appid: null, syncedAt: null, total: 0, unlocked: 0, items: [] };
+  return invoke<Achievements>("get_achievements", { id });
+}
+export async function steamLinkCandidates(id: number): Promise<{ detected: number | null; installed: { appid: number; name: string }[] }> {
+  if (!inTauri) return { detected: null, installed: [] };
+  return invoke("steam_link_candidates", { id });
+}
+export async function linkSteamGame(id: number, appid: number | null): Promise<SyncResult | null> {
+  return invoke("link_steam_game", { id, appid });
+}
+
+/** Ouvre une page web dans le navigateur (liste d'adresses autorisées côté Tauri). */
+export async function openWeb(url: string): Promise<void> {
+  if (!inTauri) {
+    window.open(url, "_blank");
+    return;
+  }
+  const { openUrl } = await import("@tauri-apps/plugin-opener");
+  await openUrl(url);
+}
+
 export async function getGameIcon(id: number): Promise<string | null> {
   if (!inTauri) return null;
   return invoke<string | null>("get_game_icon", { id });

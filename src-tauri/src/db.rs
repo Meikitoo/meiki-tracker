@@ -6,7 +6,7 @@ use rusqlite::{params, Connection, OptionalExtension, Result};
 use std::path::{Path, PathBuf};
 
 /// Version du schéma. À incrémenter à chaque migration ajoutée dans `migrate`.
-pub const SCHEMA_VERSION: i32 = 1;
+pub const SCHEMA_VERSION: i32 = 2;
 
 /// Dossier des données : %APPDATA%\MeikiTracker
 pub fn data_dir() -> PathBuf {
@@ -104,7 +104,33 @@ fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
-    debug_assert!(SCHEMA_VERSION == 1);
+    if version < 2 {
+        // v2 : succès Steam (option). Lien jeu ↔ Steam et succès synchronisés.
+        conn.execute_batch(
+            r#"
+            BEGIN;
+            ALTER TABLE games ADD COLUMN steam_appid INTEGER;
+            ALTER TABLE games ADD COLUMN steam_synced_at INTEGER;
+            CREATE TABLE steam_achievements (
+                game_id        INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+                api_name       TEXT    NOT NULL,
+                name           TEXT    NOT NULL,
+                description    TEXT,
+                hidden         INTEGER NOT NULL DEFAULT 0,
+                icon_url       TEXT,
+                icon           BLOB,
+                achieved       INTEGER NOT NULL DEFAULT 0,
+                unlocked_at    INTEGER,
+                global_percent REAL,
+                sort_order     INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (game_id, api_name)
+            );
+            PRAGMA user_version = 2;
+            COMMIT;
+            "#,
+        )?;
+    }
+    debug_assert!(SCHEMA_VERSION == 2);
     Ok(())
 }
 

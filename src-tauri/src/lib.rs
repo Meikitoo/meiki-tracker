@@ -10,6 +10,7 @@ pub mod exeinfo;
 pub mod library;
 pub mod service;
 pub mod settings;
+pub mod steam;
 pub mod system;
 pub mod tracker;
 
@@ -25,15 +26,22 @@ pub const EVENT_TICK: &str = "tracker-tick"; // à chaque vérification → chro
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // En développement avec une base de test (MEIKI_DB), on autorise une 2e instance :
+    // l'appli installée peut tourner à côté sans être dérangée.
+    let test_instance = cfg!(debug_assertions) && std::env::var_os("MEIKI_DB").is_some_and(|v| !v.is_empty());
+    if !test_instance {
         // Doit être le premier plugin : si l'appli tourne déjà, on rouvre sa fenêtre
         // au lieu de lancer un deuxième suivi.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             desktop::show_main_window(app);
-        }))
+        }));
+    }
+    builder
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![desktop::ARG_MINIMIZED])))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(commands::ExeCache::default())
         .manage(desktop::TrayTooltip::default())
         .setup(|app| {
@@ -52,6 +60,8 @@ pub fn run() {
             if !minimized {
                 desktop::show_main_window(app.handle());
             }
+
+            desktop::spawn_steam_startup_sync(app.handle().clone(), path.clone());
 
             let handle = app.handle().clone();
             let paused = control.paused.clone();
@@ -104,6 +114,15 @@ pub fn run() {
             commands::export_backup,
             commands::import_backup,
             commands::get_overview,
+            commands::get_steam_settings,
+            commands::set_steam_enabled,
+            commands::save_steam_account,
+            commands::forget_steam_account,
+            commands::steam_sync_all,
+            commands::steam_sync_game,
+            commands::get_achievements,
+            commands::steam_link_candidates,
+            commands::link_steam_game,
         ])
         .run(tauri::generate_context!())
         .expect("Erreur au lancement de Meiki Tracker");
