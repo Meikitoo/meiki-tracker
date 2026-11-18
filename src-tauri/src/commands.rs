@@ -183,6 +183,93 @@ pub async fn add_game(game: NewGame, app: AppHandle, db: State<'_, AppDb>) -> Re
     Ok(result)
 }
 
+// ------------------------------------------------------------------ Fiche d'un jeu
+
+#[tauri::command]
+pub async fn get_game_detail(id: i64, db: State<'_, AppDb>) -> Result<Option<crate::detail::GameDetail>, String> {
+    let conn = db.0.lock().map_err(err)?;
+    crate::detail::build(&conn, id, db::now()).map_err(err)
+}
+
+/// Exécute une modification, vérifie qu'elle a touché quelque chose, puis prévient l'interface.
+fn modify(
+    app: &AppHandle,
+    db: &AppDb,
+    f: impl FnOnce(&Connection) -> rusqlite::Result<bool>,
+) -> Result<(), String> {
+    let changed = {
+        let conn = db.0.lock().map_err(err)?;
+        f(&conn).map_err(err)?
+    };
+    if !changed {
+        return Err("Élément introuvable (déjà supprimé ?).".into());
+    }
+    let _ = app.emit(crate::EVENT_CHANGED, ());
+    Ok(())
+}
+
+fn clean_name(name: &str) -> Result<String, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Donne un nom au jeu.".into());
+    }
+    if name.chars().count() > 80 {
+        return Err("Le nom est trop long (80 caractères max).".into());
+    }
+    Ok(name.to_string())
+}
+
+/// Texte facultatif : vide → aucun ; tronqué à `max` caractères.
+fn optional_text(s: Option<String>, max: usize) -> Option<String> {
+    s.map(|t| t.trim().chars().take(max).collect::<String>()).filter(|t| !t.is_empty())
+}
+
+#[tauri::command]
+pub async fn rename_game(id: i64, name: String, app: AppHandle, db: State<'_, AppDb>) -> Result<(), String> {
+    let name = clean_name(&name)?;
+    modify(&app, &db, |c| db::rename_game(c, id, &name))
+}
+
+#[tauri::command]
+pub async fn set_baseline(id: i64, secs: i64, app: AppHandle, db: State<'_, AppDb>) -> Result<(), String> {
+    if !(0..=MAX_BASELINE_SECS).contains(&secs) {
+        return Err("Temps de départ invalide.".into());
+    }
+    modify(&app, &db, |c| db::set_baseline(c, id, secs))
+}
+
+#[tauri::command]
+pub async fn set_weekly_limit(id: i64, secs: Option<i64>, app: AppHandle, db: State<'_, AppDb>) -> Result<(), String> {
+    let secs = secs.filter(|s| *s > 0);
+    if secs.is_some_and(|s| s > 7 * 24 * 3600) {
+        return Err("Une semaine ne compte que 168 heures.".into());
+    }
+    modify(&app, &db, |c| db::set_weekly_limit(c, id, secs))
+}
+
+#[tauri::command]
+pub async fn archive_game(id: i64, app: AppHandle, db: State<'_, AppDb>) -> Result<(), String> {
+    modify(&app, &db, |c| db::archive_game(c, id))
+}
+
+#[tauri::command]
+pub async fn update_session(
+    id: i64,
+    tag: Option<String>,
+    note: Option<String>,
+    app: AppHandle,
+    db: State<'_, AppDb>,
+) -> Result<(), String> {
+    let tag = optional_text(tag, 30);
+    let note = optional_text(note, 200);
+    modify(&app, &db, |c| db::update_session(c, id, tag.as_deref(), note.as_deref()))
+}
+
+#[tauri::command]
+pub async fn delete_session(id: i64, app: AppHandle, db: State<'_, AppDb>) -> Result<(), String> {
+    modify(&app, &db, |c| db::delete_session(c, id))
+}
+
 /// Icône d'un jeu suivi, en « data URL » PNG.
 #[tauri::command]
 pub async fn get_game_icon(id: i64, db: State<'_, AppDb>) -> Result<Option<String>, String> {

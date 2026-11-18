@@ -17,6 +17,20 @@ export function fmtClock(secs: number): string {
   return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
 }
 
+const dayFmt = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+const dateFmt = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+const timeFmt = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
+const weekdayFmt = new Intl.DateTimeFormat("fr-FR", { weekday: "short" });
+
+/** « lun. 17 nov. » */
+export const fmtDay = (ts: number) => dayFmt.format(new Date(ts * 1000));
+/** « 17 novembre 2026 » */
+export const fmtDate = (ts: number) => dateFmt.format(new Date(ts * 1000));
+/** « 21:04 » */
+export const fmtTime = (ts: number) => timeFmt.format(new Date(ts * 1000));
+/** « lun. » */
+export const fmtWeekday = (ts: number) => weekdayFmt.format(new Date(ts * 1000));
+
 /** Variation en % entre deux valeurs, ou null si pas de référence. */
 export function percentChange(current: number, previous: number): number | null {
   if (previous <= 0) return null;

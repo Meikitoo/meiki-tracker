@@ -107,6 +107,65 @@ export async function addGame(game: NewGame): Promise<{ id: number; restored: bo
   return invoke("add_game", { game });
 }
 
+export interface GameInfo {
+  id: number;
+  name: string;
+  processName: string;
+  category: Category;
+  baselineSecs: number;
+  baselineSetAt: number | null;
+  weeklyLimitSecs: number | null;
+  addedAt: number;
+}
+
+export interface DayStat {
+  dayStart: number;
+  secs: number;
+}
+
+export interface SessionRow {
+  id: number;
+  startedAt: number;
+  endedAt: number;
+  durationSecs: number;
+  afkSecs: number;
+  gapSecs: number;
+  tag: string | null;
+  note: string | null;
+}
+
+export interface GameDetail {
+  game: GameInfo;
+  trackedSecs: number;
+  totalSecs: number;
+  sessionCount: number;
+  longestSecs: number;
+  days: DayStat[];
+  sessions: SessionRow[];
+  pending: { startedAt: number; endedAt: number; netSecs: number } | null;
+  live: boolean;
+  at: number;
+}
+
+export async function getGameDetail(id: number): Promise<GameDetail | null> {
+  if (!inTauri) return (await mock()).mockDetail(id);
+  return invoke<GameDetail | null>("get_game_detail", { id });
+}
+
+/** Appel d'une commande de modification (en aperçu navigateur : sans effet). */
+async function mutate(cmd: string, args: Record<string, unknown>): Promise<void> {
+  if (!inTauri) return;
+  await invoke(cmd, args);
+}
+
+export const renameGame = (id: number, name: string) => mutate("rename_game", { id, name });
+export const setBaseline = (id: number, secs: number) => mutate("set_baseline", { id, secs });
+export const setWeeklyLimit = (id: number, secs: number | null) => mutate("set_weekly_limit", { id, secs });
+export const archiveGame = (id: number) => mutate("archive_game", { id });
+export const updateSession = (id: number, tag: string | null, note: string | null) =>
+  mutate("update_session", { id, tag, note });
+export const deleteSession = (id: number) => mutate("delete_session", { id });
+
 export async function getGameIcon(id: number): Promise<string | null> {
   if (!inTauri) return null;
   return invoke<string | null>("get_game_icon", { id });

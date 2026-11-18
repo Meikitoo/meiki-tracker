@@ -2,6 +2,7 @@
 
 pub mod commands;
 pub mod db;
+pub mod detail;
 pub mod exclusions;
 pub mod exeinfo;
 pub mod library;
@@ -57,6 +58,13 @@ pub fn run() {
             commands::describe_exe,
             commands::add_game,
             commands::get_game_icon,
+            commands::get_game_detail,
+            commands::rename_game,
+            commands::set_baseline,
+            commands::set_weekly_limit,
+            commands::archive_game,
+            commands::update_session,
+            commands::delete_session,
         ])
         .run(tauri::generate_context!())
         .expect("Erreur au lancement de Meiki Tracker");

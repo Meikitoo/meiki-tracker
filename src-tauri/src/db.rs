@@ -207,6 +207,36 @@ pub fn add_or_restore_game(
     }
 }
 
+pub fn rename_game(conn: &Connection, id: i64, name: &str) -> Result<bool> {
+    Ok(conn.execute("UPDATE games SET name = ?2 WHERE id = ?1", params![id, name])? > 0)
+}
+
+/// Modifie le temps de départ et note la date de saisie.
+pub fn set_baseline(conn: &Connection, id: i64, secs: i64) -> Result<bool> {
+    Ok(conn.execute(
+        "UPDATE games SET baseline_secs = ?2, baseline_set_at = ?3 WHERE id = ?1",
+        params![id, secs, now()],
+    )? > 0)
+}
+
+pub fn set_weekly_limit(conn: &Connection, id: i64, secs: Option<i64>) -> Result<bool> {
+    Ok(conn.execute("UPDATE games SET weekly_limit_secs = ?2 WHERE id = ?1", params![id, secs])? > 0)
+}
+
+/// « Retirer le jeu » : il disparaît de la bibliothèque et n'est plus suivi,
+/// mais son historique est gardé (il revient si on le rajoute).
+pub fn archive_game(conn: &Connection, id: i64) -> Result<bool> {
+    Ok(conn.execute("UPDATE games SET archived = 1 WHERE id = ?1", [id])? > 0)
+}
+
+pub fn update_session(conn: &Connection, id: i64, tag: Option<&str>, note: Option<&str>) -> Result<bool> {
+    Ok(conn.execute("UPDATE sessions SET tag = ?2, note = ?3 WHERE id = ?1", params![id, tag, note])? > 0)
+}
+
+pub fn delete_session(conn: &Connection, id: i64) -> Result<bool> {
+    Ok(conn.execute("DELETE FROM sessions WHERE id = ?1", [id])? > 0)
+}
+
 pub fn game_icon(conn: &Connection, id: i64) -> Result<Option<Vec<u8>>> {
     Ok(conn
         .query_row("SELECT icon_png FROM games WHERE id = ?1", [id], |r| r.get(0))

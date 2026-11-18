@@ -1,6 +1,57 @@
 // Données factices, utilisées UNIQUEMENT quand l'interface est ouverte dans un
 // navigateur (hors appli), pour travailler le design. Jamais dans l'appli réelle.
-import type { Library, ProgramCandidate } from "./api";
+import type { GameDetail, Library, ProgramCandidate } from "./api";
+
+export function mockDetail(id: number): GameDetail | null {
+  const lib = mockLibrary();
+  const g = lib.games.find((x) => x.id === id);
+  if (!g) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const today = Math.floor(midnight.getTime() / 1000);
+  const pattern = [0, 5400, 7200, 0, 3000, 9800, 12600, 4200, 0, 6600, 2400, 10800, 8040, 1800];
+  const days = pattern.map((secs, i) => ({ dayStart: today - (13 - i) * 86400, secs }));
+  const tags = ["Ranked", "Fun", null, "Avec potes", "Stream"];
+  const sessions = pattern
+    .map((secs, i) => ({ secs, i }))
+    .filter((x) => x.secs > 0)
+    .reverse()
+    .map(({ secs, i }, n) => {
+      const start = today - (13 - i) * 86400 + 20 * 3600;
+      return {
+        id: 100 + n,
+        startedAt: start,
+        endedAt: start + secs + (n === 1 ? 900 : 0),
+        durationSecs: secs,
+        afkSecs: n === 1 ? 900 : 0,
+        gapSecs: 0,
+        tag: tags[n % tags.length],
+        note: n === 0 ? "Top 1 en Résurgence" : null,
+      };
+    });
+  return {
+    game: {
+      id: g.id,
+      name: g.name,
+      processName: g.processName,
+      category: g.category as "game" | "creation",
+      baselineSecs: g.baselineSecs,
+      baselineSetAt: now - 20 * 86400,
+      weeklyLimitSecs: g.weeklyLimitSecs,
+      addedAt: now - 20 * 86400,
+    },
+    trackedSecs: g.trackedSecs,
+    totalSecs: g.totalSecs,
+    sessionCount: sessions.length,
+    longestSecs: 12600,
+    days,
+    sessions,
+    pending: null,
+    live: g.live,
+    at: now,
+  };
+}
 
 export function mockPrograms(includeBackground: boolean): ProgramCandidate[] {
   const list: ProgramCandidate[] = [

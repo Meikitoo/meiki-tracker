@@ -74,16 +74,16 @@ pub struct LiveTick {
 
 /// Une plage de jeu : [début, fin] avec sa durée nette.
 #[derive(Debug, Clone, Copy)]
-struct Span {
-    game_id: i64,
-    start: i64,
-    end: i64,
-    net: i64,
+pub(crate) struct Span {
+    pub(crate) game_id: i64,
+    pub(crate) start: i64,
+    pub(crate) end: i64,
+    pub(crate) net: i64,
 }
 
 impl Span {
     /// Part de la durée nette tombant dans [a, b), au prorata du temps réel.
-    fn net_within(&self, a: i64, b: i64) -> i64 {
+    pub(crate) fn net_within(&self, a: i64, b: i64) -> i64 {
         let wall = self.end - self.start;
         if wall <= 0 {
             return if self.start >= a && self.start < b { self.net } else { 0 };
@@ -93,7 +93,7 @@ impl Span {
     }
 }
 
-fn local_midnight(date: NaiveDate) -> i64 {
+pub(crate) fn local_midnight(date: NaiveDate) -> i64 {
     let naive = date.and_hms_opt(0, 0, 0).expect("minuit valide");
     Local
         .from_local_datetime(&naive)
@@ -102,7 +102,7 @@ fn local_midnight(date: NaiveDate) -> i64 {
         .unwrap_or_else(|| naive.and_utc().timestamp())
 }
 
-fn local_date(ts: i64) -> NaiveDate {
+pub(crate) fn local_date(ts: i64) -> NaiveDate {
     Local
         .timestamp_opt(ts, 0)
         .single()
