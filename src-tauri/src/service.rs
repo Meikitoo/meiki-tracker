@@ -19,7 +19,8 @@ pub struct TrackerControl {
     pub stop: Arc<AtomicBool>,
 }
 
-/// Lance la boucle dans un thread dédié. `on_events` reçoit ce qui s'est passé à chaque tour.
+/// Lance la boucle dans un thread dédié. `on_events` est appelé à chaque tour
+/// (avec la liste des changements, souvent vide).
 pub fn spawn<F>(db_path: PathBuf, control: TrackerControl, on_events: F) -> std::thread::JoinHandle<()>
 where
     F: Fn(&Connection, &[TrackerEvent]) + Send + 'static,
@@ -62,8 +63,7 @@ where
         };
         let tick_input = TickInput { now, running: &names, idle_secs };
         match tracker::tick(&mut conn, &settings, &tick_input) {
-            Ok(events) if !events.is_empty() => on_events(&conn, &events),
-            Ok(_) => {}
+            Ok(events) => on_events(&conn, &events),
             // Une erreur ponctuelle (disque occupé…) ne doit pas arrêter le suivi.
             Err(e) => eprintln!("[tracker] erreur pendant la vérification : {e}"),
         }
