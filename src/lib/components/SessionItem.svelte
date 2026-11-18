@@ -55,8 +55,9 @@
     </div>
     <div class="dur">
       <span class="num">{fmtDuration(session.durationSecs)}</span>
-      {#if session.afkSecs > 0}<span class="small">{T.afk(fmtDuration(session.afkSecs))}</span>{/if}
-      {#if session.gapSecs > 0}<span class="small">{T.pauses(fmtDuration(session.gapSecs))}</span>{/if}
+      <!-- Affichés seulement à partir d'une minute (sinon « 0 min » n'aurait pas de sens). -->
+      {#if session.afkSecs >= 60}<span class="small">{T.afk(fmtDuration(session.afkSecs))}</span>{/if}
+      {#if session.gapSecs >= 60}<span class="small">{T.pauses(fmtDuration(session.gapSecs))}</span>{/if}
     </div>
     <div class="actions">
       <button class="icon-btn" type="button" aria-label={t.game.edit} title={t.game.edit} onclick={() => (editing ? (editing = false) : startEdit())}>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { setTrackingPaused } from "$lib/api";
   import { t } from "$lib/i18n";
   import { library } from "$lib/stores/library.svelte";
 
@@ -15,6 +16,16 @@
   }
 
   const playing = $derived(library.live[0]);
+
+  async function togglePause() {
+    const next = !library.paused;
+    library.paused = next; // affichage immédiat ; confirmé par le rechargement
+    try {
+      await setTrackingPaused(next);
+    } catch {
+      library.paused = !next;
+    }
+  }
 </script>
 
 <aside>
@@ -57,6 +68,9 @@
         {t.tracking.every(library.data?.checkIntervalSecs ?? 5)}
       {/if}
     </div>
+    <button class="pause" type="button" onclick={togglePause}>
+      {library.paused ? t.tracking.resume : t.tracking.pause}
+    </button>
   </div>
 </aside>
 
@@ -172,6 +186,22 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .pause {
+    margin-top: 10px;
+    width: 100%;
+    min-height: 36px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-2);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .pause:hover {
+    border-color: var(--text-3);
+    color: var(--text);
   }
   @media (prefers-reduced-motion: reduce) {
     .pulse {

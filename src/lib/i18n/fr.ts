@@ -18,6 +18,18 @@ export const fr = {
     paused: "Tracking en pause",
     every: (s: number) => `Vérification toutes les ${s} s`,
     playing: (name: string) => `En jeu : ${name}`,
+    pause: "Mettre en pause",
+    resume: "Reprendre",
+  },
+  settings: {
+    title: "Paramètres",
+    startup: "Démarrage",
+    autostart: "Lancer au démarrage de Windows",
+    autostartHint: "Meiki Tracker démarre discrètement dans la zone de notification, près de l'horloge.",
+    notifications: "Notifications",
+    notifyEnd: "Notification en fin de session",
+    notifyEndHint: "Ex. : « Call of Duty : 2h14 ce soir ».",
+    more: "Les autres réglages (durée minimale, AFK, fusion, sauvegardes) arrivent à l'étape 7.",
   },
   library: {
     title: "Ta bibliothèque",

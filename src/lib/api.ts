@@ -166,6 +166,20 @@ export const updateSession = (id: number, tag: string | null, note: string | nul
   mutate("update_session", { id, tag, note });
 export const deleteSession = (id: number) => mutate("delete_session", { id });
 
+export const setTrackingPaused = (paused: boolean) => mutate("set_tracking_paused", { paused });
+export const setAutostart = (enabled: boolean) => mutate("set_autostart", { enabled });
+export const setNotifications = (enabled: boolean) => mutate("set_notifications", { enabled });
+
+export interface StartupSettings {
+  autostart: boolean;
+  notifications: boolean;
+}
+
+export async function getStartupSettings(): Promise<StartupSettings> {
+  if (!inTauri) return { autostart: false, notifications: true };
+  return invoke<StartupSettings>("get_startup_settings");
+}
+
 export async function getGameIcon(id: number): Promise<string | null> {
   if (!inTauri) return null;
   return invoke<string | null>("get_game_icon", { id });

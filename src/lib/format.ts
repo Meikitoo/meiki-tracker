@@ -1,11 +1,11 @@
 // Formats d'affichage des durées : 453h · 4h12 · 12 min · 01:47:12
 
-/** Durée compacte : ≥ 10 h → « 453h », ≥ 1 h → « 4h12 », sinon « 12 min ». */
+/** Durée compacte : ≥ 10 h → « 453h », ≥ 1 h → « 4h12 » (« 7h » si pile), sinon « 12 min ». */
 export function fmtDuration(secs: number): string {
   const s = Math.max(0, Math.floor(secs));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
-  if (h >= 10) return `${h}h`;
+  if (h >= 10 || (h >= 1 && m === 0)) return `${h}h`;
   if (h >= 1) return `${h}h${String(m).padStart(2, "0")}`;
   return `${m} min`;
 }

@@ -270,6 +270,47 @@ pub async fn delete_session(id: i64, app: AppHandle, db: State<'_, AppDb>) -> Re
     modify(&app, &db, |c| db::delete_session(c, id))
 }
 
+// ------------------------------------------------------------------ Bureau
+
+#[tauri::command]
+pub async fn set_tracking_paused(paused: bool, app: AppHandle) -> Result<(), String> {
+    crate::desktop::set_paused(&app, paused);
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupSettings {
+    pub autostart: bool,
+    pub notifications: bool,
+}
+
+#[tauri::command]
+pub async fn get_startup_settings(app: AppHandle, db: State<'_, AppDb>) -> Result<StartupSettings, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    // L'état réel du lancement auto est lu dans Windows (source de vérité).
+    let autostart = app.autolaunch().is_enabled().unwrap_or(false);
+    let conn = db.0.lock().map_err(err)?;
+    let notifications = Settings::load(&conn).map_err(err)?.notifications;
+    Ok(StartupSettings { autostart, notifications })
+}
+
+#[tauri::command]
+pub async fn set_autostart(enabled: bool, app: AppHandle, db: State<'_, AppDb>) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let manager = app.autolaunch();
+    let result = if enabled { manager.enable() } else { manager.disable() };
+    result.map_err(|e| format!("Impossible de modifier le lancement au démarrage : {e}"))?;
+    let conn = db.0.lock().map_err(err)?;
+    db::set_setting(&conn, "autostart", if enabled { "true" } else { "false" }).map_err(err)
+}
+
+#[tauri::command]
+pub async fn set_notifications(enabled: bool, db: State<'_, AppDb>) -> Result<(), String> {
+    let conn = db.0.lock().map_err(err)?;
+    db::set_setting(&conn, "notifications", if enabled { "true" } else { "false" }).map_err(err)
+}
+
 /// Icône d'un jeu suivi, en « data URL » PNG.
 #[tauri::command]
 pub async fn get_game_icon(id: i64, db: State<'_, AppDb>) -> Result<Option<String>, String> {
