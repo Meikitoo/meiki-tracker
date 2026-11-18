@@ -180,6 +180,91 @@ export async function getStartupSettings(): Promise<StartupSettings> {
   return invoke<StartupSettings>("get_startup_settings");
 }
 
+export interface AppSettings {
+  checkIntervalSecs: number;
+  minSessionSecs: number;
+  afkThresholdSecs: number;
+  mergeWindowSecs: number;
+  autostart: boolean;
+  notifications: boolean;
+  theme: string;
+  backupDir: string | null;
+}
+
+export interface SettingsView {
+  settings: AppSettings;
+  autostart: boolean;
+  lastAutoBackupAt: number | null;
+  suggestedBackupName: string;
+}
+
+export async function getSettings(): Promise<SettingsView> {
+  if (!inTauri) {
+    return {
+      settings: { checkIntervalSecs: 5, minSessionSecs: 120, afkThresholdSecs: 600, mergeWindowSecs: 300, autostart: false, notifications: true, theme: "dark", backupDir: null },
+      autostart: false,
+      lastAutoBackupAt: null,
+      suggestedBackupName: "meiki-tracker.meikibackup",
+    };
+  }
+  return invoke<SettingsView>("get_settings");
+}
+
+export const updateTrackingSettings = (s: { minSessionSecs: number; afkThresholdSecs: number; mergeWindowSecs: number }) =>
+  mutate("update_tracking_settings", { s });
+export const setBackupDir = (path: string | null) => mutate("set_backup_dir", { path });
+
+const BACKUP_FILTER = [{ name: "Sauvegarde Meiki Tracker", extensions: ["meikibackup"] }];
+
+/** Exporte vers un fichier choisi par l'utilisateur. Renvoie le chemin, ou null si annulé. */
+export async function exportBackup(title: string, defaultName: string): Promise<string | null> {
+  if (!inTauri) return null;
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const path = await save({ title, defaultPath: defaultName, filters: BACKUP_FILTER });
+  if (!path) return null;
+  await invoke("export_backup", { path });
+  return path;
+}
+
+export async function pickBackupFile(title: string): Promise<string | null> {
+  if (!inTauri) return null;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const path = await open({ title, multiple: false, directory: false, filters: BACKUP_FILTER });
+  return path ?? null;
+}
+
+export async function pickFolder(title: string): Promise<string | null> {
+  if (!inTauri) return null;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const path = await open({ title, multiple: false, directory: true });
+  return path ?? null;
+}
+
+export interface ImportSummary {
+  games: number;
+  sessions: number;
+  safetyBackup: string;
+}
+
+export async function importBackup(path: string): Promise<ImportSummary> {
+  return invoke<ImportSummary>("import_backup", { path });
+}
+
+export interface Overview {
+  days: DayStat[];
+  games: { id: number; name: string; weekSecs: number; totalSecs: number }[];
+  at: number;
+}
+
+export async function getOverview(): Promise<Overview> {
+  if (!inTauri) {
+    const d = (await mock()).mockDetail(1)!;
+    const lib = (await mock()).mockLibrary();
+    return { days: d.days, games: lib.games.map((g) => ({ id: g.id, name: g.name, weekSecs: g.weekSecs, totalSecs: g.totalSecs })), at: d.at };
+  }
+  return invoke<Overview>("get_overview");
+}
+
 export async function getGameIcon(id: number): Promise<string | null> {
   if (!inTauri) return null;
   return invoke<string | null>("get_game_icon", { id });

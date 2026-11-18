@@ -1,5 +1,6 @@
 //! Point d'entrée de l'application Meiki Tracker (côté Rust).
 
+pub mod backup;
 pub mod commands;
 pub mod db;
 pub mod desktop;
@@ -98,6 +99,12 @@ pub fn run() {
             commands::get_startup_settings,
             commands::set_autostart,
             commands::set_notifications,
+            commands::get_settings,
+            commands::update_tracking_settings,
+            commands::set_backup_dir,
+            commands::export_backup,
+            commands::import_backup,
+            commands::get_overview,
         ])
         .run(tauri::generate_context!())
         .expect("Erreur au lancement de Meiki Tracker");

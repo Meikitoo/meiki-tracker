@@ -48,11 +48,26 @@ where
     let mut scanner = ProcessScanner::new();
     let mut input = InputMonitor::new();
     let empty = HashSet::new();
+    let mut last_backup_check = 0i64;
 
     while !control.stop.load(Ordering::Relaxed) {
         // Réglages relus à chaque tour : un changement dans Paramètres s'applique tout de suite.
-        let settings = Settings::load(&conn)?;
+        // Une erreur de lecture ponctuelle ne doit jamais arrêter le suivi.
+        let settings = Settings::load(&conn).unwrap_or_else(|e| {
+            eprintln!("[tracker] réglages illisibles, valeurs par défaut utilisées : {e}");
+            Settings::default()
+        });
         let now = db::now();
+
+        // Sauvegarde automatique hebdomadaire (vérifiée au plus une fois par heure).
+        if now - last_backup_check >= 3600 {
+            last_backup_check = now;
+            match crate::backup::maybe_auto_backup(&conn, now) {
+                Ok(Some(path)) => println!("[sauvegarde] automatique : {}", path.display()),
+                Ok(None) => {}
+                Err(e) => eprintln!("[sauvegarde] échec de la sauvegarde automatique : {e}"),
+            }
+        }
         let paused = control.paused.load(Ordering::Relaxed);
         let idle_secs = input.idle_secs(now);
         let names = if paused { Some(empty.clone()) } else { scanner.running_names() };

@@ -311,6 +311,99 @@ pub async fn set_notifications(enabled: bool, db: State<'_, AppDb>) -> Result<()
     db::set_setting(&conn, "notifications", if enabled { "true" } else { "false" }).map_err(err)
 }
 
+// ------------------------------------------------------------------ Paramètres et sauvegardes
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsView {
+    pub settings: Settings,
+    /// État réel du lancement avec Windows.
+    pub autostart: bool,
+    pub last_auto_backup_at: Option<i64>,
+    pub suggested_backup_name: String,
+}
+
+#[tauri::command]
+pub async fn get_settings(app: AppHandle, db: State<'_, AppDb>) -> Result<SettingsView, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let autostart = app.autolaunch().is_enabled().unwrap_or(false);
+    let conn = db.0.lock().map_err(err)?;
+    let settings = Settings::load(&conn).map_err(err)?;
+    let last_auto_backup_at = db::get_setting(&conn, "last_auto_backup_at").map_err(err)?.and_then(|v| v.parse().ok());
+    Ok(SettingsView {
+        settings,
+        autostart,
+        last_auto_backup_at,
+        suggested_backup_name: crate::backup::suggested_name(db::now()),
+    })
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackingSettings {
+    pub min_session_secs: i64,
+    pub afk_threshold_secs: i64,
+    pub merge_window_secs: i64,
+}
+
+#[tauri::command]
+pub async fn update_tracking_settings(s: TrackingSettings, db: State<'_, AppDb>) -> Result<(), String> {
+    if !(0..=3600).contains(&s.min_session_secs) {
+        return Err("Durée minimale : entre 0 et 60 minutes.".into());
+    }
+    if s.afk_threshold_secs != 0 && !(60..=7200).contains(&s.afk_threshold_secs) {
+        return Err("Seuil AFK : entre 1 et 120 minutes (ou désactivé).".into());
+    }
+    if !(0..=3600).contains(&s.merge_window_secs) {
+        return Err("Fusion : entre 0 et 60 minutes.".into());
+    }
+    let conn = db.0.lock().map_err(err)?;
+    db::set_setting(&conn, "min_session_secs", &s.min_session_secs.to_string()).map_err(err)?;
+    db::set_setting(&conn, "afk_threshold_secs", &s.afk_threshold_secs.to_string()).map_err(err)?;
+    db::set_setting(&conn, "merge_window_secs", &s.merge_window_secs.to_string()).map_err(err)
+}
+
+/// Dossier de sauvegarde automatique (`None` : désactivée).
+#[tauri::command]
+pub async fn set_backup_dir(path: Option<String>, db: State<'_, AppDb>) -> Result<(), String> {
+    let conn = db.0.lock().map_err(err)?;
+    match path.filter(|p| !p.trim().is_empty()) {
+        Some(p) => {
+            if !Path::new(&p).is_dir() {
+                return Err("Ce dossier n'existe pas.".into());
+            }
+            db::set_setting(&conn, "backup_dir", &p).map_err(err)?;
+            // Première sauvegarde tout de suite, pour vérifier que le dossier est utilisable.
+            crate::backup::run_auto_backup(&conn, Path::new(&p), db::now()).map(|_| ())
+        }
+        None => db::set_setting(&conn, "backup_dir", "").map_err(err),
+    }
+}
+
+#[tauri::command]
+pub async fn export_backup(path: String, db: State<'_, AppDb>) -> Result<(), String> {
+    let conn = db.0.lock().map_err(err)?;
+    crate::backup::backup_to(&conn, Path::new(&path))
+}
+
+#[tauri::command]
+pub async fn import_backup(path: String, app: AppHandle, db: State<'_, AppDb>) -> Result<crate::backup::ImportSummary, String> {
+    let summary = {
+        let mut conn = db.0.lock().map_err(err)?;
+        let db_path = db::default_db_path();
+        let safety_dir = db_path.parent().map(|p| p.join("avant-import")).unwrap_or_else(|| db::data_dir().join("avant-import"));
+        crate::backup::import_from(&mut conn, Path::new(&path), db::now(), &safety_dir)?
+    };
+    let _ = app.emit(crate::EVENT_CHANGED, ());
+    Ok(summary)
+}
+
+#[tauri::command]
+pub async fn get_overview(db: State<'_, AppDb>) -> Result<crate::detail::Overview, String> {
+    let conn = db.0.lock().map_err(err)?;
+    crate::detail::overview(&conn, db::now()).map_err(err)
+}
+
 /// Icône d'un jeu suivi, en « data URL » PNG.
 #[tauri::command]
 pub async fn get_game_icon(id: i64, db: State<'_, AppDb>) -> Result<Option<String>, String> {

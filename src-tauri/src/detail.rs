@@ -120,6 +120,51 @@ pub fn build(conn: &Connection, id: i64, now: i64) -> Result<Option<GameDetail>>
     }))
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameShare {
+    pub id: i64,
+    pub name: String,
+    pub week_secs: i64,
+    pub total_secs: i64,
+}
+
+/// Page Statistiques : tous jeux confondus (hors session en cours, ajoutée en direct).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Overview {
+    pub days: Vec<DayStat>,
+    pub games: Vec<GameShare>,
+    pub at: i64,
+}
+
+pub fn overview(conn: &Connection, now: i64) -> Result<Overview> {
+    let lib = crate::library::build(conn, now, false, 5)?;
+    let mut spans = Vec::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT s.game_id, s.started_at, s.ended_at, s.duration_secs FROM sessions s
+             JOIN games g ON g.id = s.game_id WHERE g.archived = 0",
+        )?;
+        let rows = stmt.query_map([], |r| Ok(Span { game_id: r.get(0)?, start: r.get(1)?, end: r.get(2)?, net: r.get(3)? }))?;
+        for s in rows {
+            spans.push(s?);
+        }
+    }
+    for l in db::live_sessions(conn)? {
+        if let Some(end) = l.ended_at {
+            spans.push(Span { game_id: l.game_id, start: l.started_at, end, net: l.net_secs(end) });
+        }
+    }
+    let mut games: Vec<GameShare> = lib
+        .games
+        .into_iter()
+        .map(|g| GameShare { id: g.id, name: g.name, week_secs: g.week_secs, total_secs: g.total_secs })
+        .collect();
+    games.sort_by(|a, b| b.week_secs.cmp(&a.week_secs).then(b.total_secs.cmp(&a.total_secs)));
+    Ok(Overview { days: daily(&spans, now, CHART_DAYS), games, at: now })
+}
+
 /// Temps joué par jour (heure locale) sur les `n` derniers jours, aujourd'hui compris.
 fn daily(spans: &[Span], now: i64, n: i64) -> Vec<DayStat> {
     let today = local_date(now);

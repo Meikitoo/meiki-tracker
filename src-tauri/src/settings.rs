@@ -3,7 +3,8 @@
 use crate::db;
 use rusqlite::{Connection, Result};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Settings {
     /// Intervalle entre deux vérifications des processus.
     pub check_interval_secs: i64,

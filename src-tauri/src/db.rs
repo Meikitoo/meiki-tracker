@@ -6,7 +6,7 @@ use rusqlite::{params, Connection, OptionalExtension, Result};
 use std::path::{Path, PathBuf};
 
 /// Version du schéma. À incrémenter à chaque migration ajoutée dans `migrate`.
-const SCHEMA_VERSION: i32 = 1;
+pub const SCHEMA_VERSION: i32 = 1;
 
 /// Dossier des données : %APPDATA%\MeikiTracker
 pub fn data_dir() -> PathBuf {
@@ -16,13 +16,15 @@ pub fn data_dir() -> PathBuf {
     base.join("MeikiTracker")
 }
 
-/// Chemin de la base. La variable d'environnement MEIKI_DB permet d'utiliser
-/// une base de test (développement uniquement).
+/// Chemin de la base. En développement uniquement, la variable d'environnement
+/// MEIKI_DB permet d'utiliser une base de test (ignorée dans la version installée).
 pub fn default_db_path() -> PathBuf {
-    match std::env::var_os("MEIKI_DB") {
-        Some(p) if !p.is_empty() => PathBuf::from(p),
-        _ => data_dir().join("meiki.db"),
+    if cfg!(debug_assertions) {
+        if let Some(p) = std::env::var_os("MEIKI_DB").filter(|p| !p.is_empty()) {
+            return PathBuf::from(p);
+        }
     }
+    data_dir().join("meiki.db")
 }
 
 /// Ouvre (ou crée) la base au chemin donné et applique les migrations.
