@@ -1,4 +1,5 @@
 // Formats d'affichage des durées : 453h · 4h12 · 12 min · 01:47:12
+import { t } from "$lib/i18n";
 
 /** Durée compacte : ≥ 10 h → « 453h », ≥ 1 h → « 4h12 » (« 7h » si pile), sinon « 12 min ». */
 export function fmtDuration(secs: number): string {
@@ -17,10 +18,10 @@ export function fmtClock(secs: number): string {
   return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
 }
 
-const dayFmt = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "short" });
-const dateFmt = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" });
-const timeFmt = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
-const weekdayFmt = new Intl.DateTimeFormat("fr-FR", { weekday: "short" });
+const dayFmt = new Intl.DateTimeFormat(t.locale, { weekday: "short", day: "numeric", month: "short" });
+const dateFmt = new Intl.DateTimeFormat(t.locale, { day: "numeric", month: "long", year: "numeric" });
+const timeFmt = new Intl.DateTimeFormat(t.locale, { hour: "2-digit", minute: "2-digit" });
+const weekdayFmt = new Intl.DateTimeFormat(t.locale, { weekday: "short" });
 
 /** « lun. 17 nov. » */
 export const fmtDay = (ts: number) => dayFmt.format(new Date(ts * 1000));

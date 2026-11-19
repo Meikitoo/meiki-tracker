@@ -7,7 +7,9 @@ pub mod desktop;
 pub mod detail;
 pub mod exclusions;
 pub mod exeinfo;
+pub mod i18n;
 pub mod library;
+pub mod recap;
 pub mod service;
 pub mod settings;
 pub mod steam;
@@ -48,6 +50,7 @@ pub fn run() {
             let path = db::default_db_path();
             // Ouvrir la base ici d'abord garantit que le schéma existe avant le thread de suivi.
             let conn = db::open(&path)?;
+            i18n::load(&conn);
             app.manage(commands::AppDb(Mutex::new(conn)));
 
             let control = TrackerControl::default();
@@ -114,6 +117,9 @@ pub fn run() {
             commands::export_backup,
             commands::import_backup,
             commands::get_overview,
+            commands::set_language,
+            commands::get_recap,
+            commands::save_png,
             commands::get_steam_settings,
             commands::set_steam_enabled,
             commands::save_steam_account,

@@ -3,10 +3,30 @@
   import { onMount } from "svelte";
   import Sidebar from "$lib/components/Sidebar.svelte";
   import { library } from "$lib/stores/library.svelte";
+  import { getSettings, inTauri, setLanguage } from "$lib/api";
+  import { lang, rememberLang } from "$lib/i18n";
+
+  // La langue enregistrée dans la base fait foi (ex. : après un import ou une
+  // réinstallation). Premier lancement : on y enregistre la langue détectée.
+  async function syncLanguage() {
+    if (!inTauri) return;
+    try {
+      const saved = (await getSettings()).language;
+      if (!saved) await setLanguage(lang);
+      else if (saved !== lang) {
+        rememberLang(saved);
+        location.reload();
+      }
+    } catch {
+      // sans gravité : on garde la langue actuelle
+    }
+  }
 
   let { children } = $props();
 
   onMount(() => {
+    document.documentElement.lang = lang;
+    syncLanguage();
     library.start();
   });
 </script>

@@ -59,7 +59,7 @@
     reset();
     const key = apiKey.trim();
     if (!key && !view?.hasKey) {
-      error = "Colle ta clé API Steam.";
+      error = T.keyRequired;
       return;
     }
     busy = "save";
@@ -174,12 +174,16 @@
           <div class="text">
             <span class="label">{T.linkedCount(view.linkedGames)}</span>
             <span class="hint">
-              {view.lastSyncAt ? T.lastSync(`${fmtDate(view.lastSyncAt)} à ${fmtTime(view.lastSyncAt)}`) : T.neverSynced}
+              {view.lastSyncAt ? T.lastSync(t.dateAt(fmtDate(view.lastSyncAt), fmtTime(view.lastSyncAt))) : T.neverSynced}
             </span>
           </div>
-          <button class="btn" type="button" disabled={busy !== null || view.linkedGames === 0} onclick={syncAll}>
-            {busy === "sync" ? T.syncing : T.syncAll}
-          </button>
+          {#if view.linkedGames === 0}
+            <span class="hint link-first">{T.linkFirst}</span>
+          {:else}
+            <button class="btn" type="button" disabled={busy !== null} onclick={syncAll}>
+              {busy === "sync" ? T.syncing : T.syncAll}
+            </button>
+          {/if}
         </div>
       {/if}
     {:else if error}
@@ -278,6 +282,10 @@
   .danger-outline:hover {
     border-color: var(--alert);
     color: var(--alert-2);
+  }
+  .link-first {
+    max-width: 260px;
+    text-align: right;
   }
   .sync {
     border-top: 1px solid var(--border);

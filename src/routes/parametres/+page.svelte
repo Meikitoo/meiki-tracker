@@ -8,6 +8,7 @@
     pickFolder,
     setAutostart,
     setBackupDir,
+    setLanguage,
     setNotifications,
     updateTrackingSettings,
     type SettingsView,
@@ -16,7 +17,7 @@
   import SteamSettings from "$lib/components/SteamSettings.svelte";
   import Toggle from "$lib/components/Toggle.svelte";
   import { fmtDate, fmtTime } from "$lib/format";
-  import { t } from "$lib/i18n";
+  import { LANGS, lang, rememberLang, t, type Lang } from "$lib/i18n";
   import { library } from "$lib/stores/library.svelte";
 
   const T = t.settings;
@@ -55,7 +56,7 @@
   async function saveTracking() {
     const ints = [minSession, afkMinutes, merge];
     if (ints.some((v) => !Number.isInteger(v) || v < 0) || minSession > 60 || merge > 60 || (afkOn && (afkMinutes < 1 || afkMinutes > 120))) {
-      error = "Vérifie les valeurs : durée minimale et fusion entre 0 et 60 min, AFK entre 1 et 120 min.";
+      error = T.invalidValues;
       return;
     }
     savingTracking = true;
@@ -79,6 +80,17 @@
     try {
       await setAutostart(v);
       await load();
+    } catch (e) {
+      report(e);
+    }
+  }
+
+  async function chooseLanguage(l: Lang) {
+    if (l === lang) return;
+    try {
+      await setLanguage(l);
+      rememberLang(l);
+      location.reload();
     } catch (e) {
       report(e);
     }
@@ -157,6 +169,27 @@
 
 {#if view}
   <section class="panel">
+    <h2>{T.language}</h2>
+    <div class="setting">
+      <div class="text">
+        <span class="label">{T.languageLabel}</span>
+        <span class="hint">{T.languageHint}</span>
+      </div>
+      <div class="segmented" role="radiogroup" aria-label={T.languageLabel}>
+        {#each LANGS as l (l.id)}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={l.id === lang}
+            class:active={l.id === lang}
+            onclick={() => chooseLanguage(l.id)}>{l.label}</button
+          >
+        {/each}
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
     <h2>{T.tracking}</h2>
     <form
       novalidate
@@ -228,7 +261,7 @@
         {#if view.settings.backupDir}
           <span class="hint path">{T.autoOn(view.settings.backupDir)}</span>
           {#if view.lastAutoBackupAt}
-            <span class="hint">{T.autoLast(`${fmtDate(view.lastAutoBackupAt)} à ${fmtTime(view.lastAutoBackupAt)}`)} · {T.autoKeep}</span>
+            <span class="hint">{T.autoLast(t.dateAt(fmtDate(view.lastAutoBackupAt), fmtTime(view.lastAutoBackupAt)))} · {T.autoKeep}</span>
           {/if}
         {:else}
           <span class="hint">{T.autoOff}</span>
@@ -346,6 +379,30 @@
     color: var(--text);
     border: 1px solid var(--accent);
     background: var(--accent-bg);
+  }
+  .segmented {
+    display: flex;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .segmented button {
+    min-height: 44px;
+    padding: 0 18px;
+    background: transparent;
+    border: 0;
+    color: var(--text-2);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .segmented button + button {
+    border-left: 1px solid var(--border-strong);
+  }
+  .segmented button.active {
+    background: var(--accent-bg);
+    color: var(--accent);
   }
   .privacy {
     color: var(--text-2);

@@ -4,6 +4,7 @@
 //! (`VACUUM INTO`), avec l'extension `.meikibackup`.
 
 use crate::db;
+use crate::i18n::tr;
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use std::path::{Path, PathBuf};
 
@@ -31,16 +32,16 @@ const SECRET_KEYS: &[&str] = &[crate::steam::KEY_API_KEY];
 /// Écrit une copie complète de la base dans `dest` (remplacée si elle existe).
 pub fn backup_to(conn: &Connection, dest: &Path) -> Result<(), String> {
     if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Dossier inaccessible : {e}"))?;
+        std::fs::create_dir_all(parent).map_err(|e| crate::trf!("Dossier inaccessible : {e}", "Folder not accessible: {e}"))?;
     }
     if dest.exists() {
-        std::fs::remove_file(dest).map_err(|e| format!("Impossible de remplacer le fichier : {e}"))?;
+        std::fs::remove_file(dest).map_err(|e| crate::trf!("Impossible de remplacer le fichier : {e}", "Couldn't replace the file: {e}"))?;
     }
     conn.execute("VACUUM INTO ?1", [dest.to_string_lossy()])
-        .map_err(|e| format!("Sauvegarde impossible : {e}"))?;
+        .map_err(|e| crate::trf!("Sauvegarde impossible : {e}", "Backup failed: {e}"))?;
     strip_secrets(dest).map_err(|e| {
         let _ = std::fs::remove_file(dest);
-        format!("Sauvegarde impossible : {e}")
+        crate::trf!("Sauvegarde impossible : {e}", "Backup failed: {e}")
     })
 }
 
@@ -77,11 +78,11 @@ pub struct ImportSummary {
 
 /// Vérifie qu'un fichier est bien une sauvegarde Meiki Tracker lisible.
 fn check_backup(path: &Path) -> Result<(i64, i64), String> {
-    let bad = || "Ce fichier n'est pas une sauvegarde Meiki Tracker valide.".to_string();
+    let bad = || tr("Ce fichier n'est pas une sauvegarde Meiki Tracker valide.", "This file isn't a valid Meiki Tracker backup.").to_string();
     let src = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|_| bad())?;
     let version: i32 = src.pragma_query_value(None, "user_version", |r| r.get(0)).map_err(|_| bad())?;
     if version > db::SCHEMA_VERSION {
-        return Err("Cette sauvegarde vient d'une version plus récente de Meiki Tracker : mets l'appli à jour.".into());
+        return Err(tr("Cette sauvegarde vient d'une version plus récente de Meiki Tracker : mets l'appli à jour.", "This backup comes from a newer version of Meiki Tracker: update the app.").into());
     }
     if version < 1 {
         return Err(bad());
@@ -102,7 +103,7 @@ pub fn import_from(conn: &mut Connection, src: &Path, now: i64, safety_dir: &Pat
         .optional()
         .map_err(|e| e.to_string())?;
     if running.is_some() {
-        return Err("Un jeu est en cours : ferme-le avant d'importer une sauvegarde.".into());
+        return Err(tr("Un jeu est en cours : ferme-le avant d'importer une sauvegarde.", "A game is running: close it before importing a backup.").into());
     }
 
     // Filet de sécurité : copie des données actuelles avant de les remplacer.
@@ -112,7 +113,7 @@ pub fn import_from(conn: &mut Connection, src: &Path, now: i64, safety_dir: &Pat
     // Copie temporaire mise au format actuel (une sauvegarde d'une ancienne version
     // reçoit ainsi les nouvelles colonnes) : le fichier choisi n'est jamais modifié.
     let staged = safety_dir.join(format!("import-en-cours-{}.db", stamp(now, true)));
-    std::fs::copy(src, &staged).map_err(|e| format!("Lecture de la sauvegarde impossible : {e}"))?;
+    std::fs::copy(src, &staged).map_err(|e| crate::trf!("Lecture de la sauvegarde impossible : {e}", "Couldn't read the backup: {e}"))?;
     let cleanup = |p: &Path| {
         for suffix in ["", "-wal", "-shm"] {
             let _ = std::fs::remove_file(format!("{}{suffix}", p.to_string_lossy()));
@@ -120,7 +121,7 @@ pub fn import_from(conn: &mut Connection, src: &Path, now: i64, safety_dir: &Pat
     };
     if let Err(e) = db::open(&staged) {
         cleanup(&staged);
-        return Err(format!("Ce fichier n'est pas une sauvegarde Meiki Tracker valide ({e})."));
+        return Err(crate::trf!("Ce fichier n'est pas une sauvegarde Meiki Tracker valide ({e}).", "This file isn't a valid Meiki Tracker backup ({e})."));
     }
     let attached = conn.execute("ATTACH DATABASE ?1 AS imp", [staged.to_string_lossy()]).map_err(|e| e.to_string());
     if let Err(e) = attached {
@@ -152,7 +153,7 @@ pub fn import_from(conn: &mut Connection, src: &Path, now: i64, safety_dir: &Pat
     })();
     let _ = conn.execute("DETACH DATABASE imp", []);
     cleanup(&staged);
-    result.map_err(|e| format!("Import impossible (tes données n'ont pas été modifiées) : {e}"))?;
+    result.map_err(|e| crate::trf!("Import impossible (tes données n'ont pas été modifiées) : {e}", "Import failed (your data wasn't changed): {e}"))?;
 
     Ok(ImportSummary { games, sessions, safety_backup: safety.to_string_lossy().to_string() })
 }

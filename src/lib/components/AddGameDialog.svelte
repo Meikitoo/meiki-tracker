@@ -93,7 +93,7 @@
       const p = await browseExe(T.pick.browseTitle);
       if (!p) return;
       if (p.alreadyTracked) {
-        error = "Ce jeu est déjà dans ta bibliothèque.";
+        error = T.details.alreadyTracked;
         return;
       }
       choose(p);

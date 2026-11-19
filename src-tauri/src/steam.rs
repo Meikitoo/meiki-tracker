@@ -7,6 +7,7 @@
 //!   images), avec la clé API de l'utilisateur, pour lire ses succès. Rien d'autre.
 
 use crate::db;
+use crate::i18n::tr;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use serde_json::Value;
@@ -21,7 +22,9 @@ pub const KEY_STEAM_ID: &str = "steam_id";
 pub const KEY_LAST_SYNC: &str = "steam_last_sync_at";
 
 /// Langue des noms et descriptions de succès renvoyés par Steam.
-const LANG: &str = "french";
+fn lang() -> &'static str {
+    tr("french", "english")
+}
 const API: &str = "https://api.steampowered.com";
 /// Outils Steam installés comme des jeux, jamais proposés.
 const IGNORED_APPS: &[u32] = &[228980];
@@ -347,11 +350,11 @@ pub fn config(conn: &Connection) -> rusqlite::Result<SteamConfig> {
 fn credentials(conn: &Connection) -> Result<(String, String), String> {
     let c = config(conn).map_err(|e| e.to_string())?;
     if !c.enabled {
-        return Err("La synchronisation des succès Steam est désactivée (Paramètres).".into());
+        return Err(tr("La synchronisation des succès Steam est désactivée (Paramètres).", "Steam achievements sync is turned off (Settings).").into());
     }
     match (c.api_key, c.steam_id) {
         (Some(k), Some(id)) => Ok((k, id)),
-        _ => Err("Renseigne ta clé API et ton compte Steam dans les Paramètres.".into()),
+        _ => Err(tr("Renseigne ta clé API et ton compte Steam dans les Paramètres.", "Enter your Steam API key and account in Settings.").into()),
     }
 }
 
@@ -392,14 +395,16 @@ fn agent() -> ureq::Agent {
         .into()
 }
 
-const NETWORK_ERROR: &str = "Impossible de joindre Steam. Vérifie ta connexion Internet.";
+fn network_error() -> String {
+    tr("Impossible de joindre Steam. Vérifie ta connexion Internet.", "Can't reach Steam. Check your Internet connection.").to_string()
+}
 
 fn get_json(agent: &ureq::Agent, path: &str, query: &[(&str, &str)]) -> Result<(u16, Value), String> {
     let mut resp = agent
         .get(format!("{API}/{path}"))
         .query_pairs(query.iter().copied())
         .call()
-        .map_err(|_| NETWORK_ERROR.to_string())?;
+        .map_err(|_| network_error())?;
     let status = resp.status().as_u16();
     let body = resp.body_mut().read_json::<Value>().unwrap_or(Value::Null);
     Ok((status, body))
@@ -407,10 +412,10 @@ fn get_json(agent: &ureq::Agent, path: &str, query: &[(&str, &str)]) -> Result<(
 
 fn http_error(status: u16) -> String {
     match status {
-        401 | 403 => "Steam refuse la clé API. Vérifie-la (32 caractères) sur steamcommunity.com/dev/apikey.".into(),
-        429 => "Steam limite le nombre de demandes. Réessaie dans quelques minutes.".into(),
-        500..=599 => "Les serveurs de Steam ne répondent pas pour le moment. Réessaie plus tard.".into(),
-        s => format!("Réponse inattendue de Steam (code {s})."),
+        401 | 403 => tr("Steam refuse la clé API. Vérifie-la (32 caractères) sur steamcommunity.com/dev/apikey.", "Steam rejected the API key. Check it (32 characters) on steamcommunity.com/dev/apikey.").into(),
+        429 => tr("Steam limite le nombre de demandes. Réessaie dans quelques minutes.", "Steam is rate-limiting requests. Try again in a few minutes.").into(),
+        500..=599 => tr("Les serveurs de Steam ne répondent pas pour le moment. Réessaie plus tard.", "Steam's servers aren't responding right now. Try again later.").into(),
+        s => crate::trf!("Réponse inattendue de Steam (code {s}).", "Unexpected response from Steam (code {s})."),
     }
 }
 
@@ -431,7 +436,7 @@ pub fn check_account(api_key: &str, steam_id: &str) -> Result<AccountCheck, Stri
     let player = body["response"]["players"]
         .as_array()
         .and_then(|p| p.first())
-        .ok_or("Aucun compte Steam ne correspond à cet identifiant.")?;
+        .ok_or(tr("Aucun compte Steam ne correspond à cet identifiant.", "No Steam account matches this ID."))?;
     Ok(AccountCheck {
         persona: player["personaname"].as_str().unwrap_or("").to_string(),
         public: player["communityvisibilitystate"].as_i64() == Some(3),
@@ -454,11 +459,11 @@ pub struct RemoteAchievement {
 fn player_error(msg: &str) -> String {
     let m = msg.to_lowercase();
     if m.contains("not public") || m.contains("private") {
-        "Ton profil Steam est privé : dans Steam, Profil → Modifier le profil → Confidentialité, mets « Détails des jeux » sur Public.".into()
+        tr("Ton profil Steam est privé : dans Steam, Profil → Modifier le profil → Confidentialité, mets « Détails des jeux » sur Public.", "Your Steam profile is private: in Steam, go to Profile → Edit Profile → Privacy Settings and set \"Game details\" to Public.").into()
     } else if m.contains("no stats") {
-        "Ce jeu n'a pas de succès Steam.".into()
+        tr("Ce jeu n'a pas de succès Steam.", "This game has no Steam achievements.").into()
     } else {
-        format!("Steam a répondu : {msg}")
+        crate::trf!("Steam a répondu : {msg}", "Steam replied: {msg}")
     }
 }
 
@@ -471,19 +476,19 @@ pub fn fetch_achievements(api_key: &str, steam_id: &str, appid: u32) -> Result<V
     let agent = agent();
     let app = appid.to_string();
 
-    let (status, schema) = get_json(&agent, "ISteamUserStats/GetSchemaForGame/v2/", &[("key", api_key), ("appid", &app), ("l", LANG)])?;
+    let (status, schema) = get_json(&agent, "ISteamUserStats/GetSchemaForGame/v2/", &[("key", api_key), ("appid", &app), ("l", lang())])?;
     if status != 200 {
         return Err(http_error(status));
     }
     let list = schema["game"]["availableGameStats"]["achievements"].as_array().cloned().unwrap_or_default();
     if list.is_empty() {
-        return Err("Ce jeu n'a pas de succès Steam.".into());
+        return Err(tr("Ce jeu n'a pas de succès Steam.", "This game has no Steam achievements.").into());
     }
 
     let (status, player) = get_json(
         &agent,
         "ISteamUserStats/GetPlayerAchievements/v1/",
-        &[("key", api_key), ("steamid", steam_id), ("appid", &app), ("l", LANG)],
+        &[("key", api_key), ("steamid", steam_id), ("appid", &app), ("l", lang())],
     )?;
     if let Some(msg) = player["playerstats"]["error"].as_str() {
         return Err(player_error(msg));
@@ -636,7 +641,7 @@ pub fn sync_game(db_path: &Path, game_id: i64) -> Result<SyncResult, String> {
 
 fn sync_game_with(conn: &mut Connection, game_id: i64) -> Result<SyncResult, String> {
     let (key, steam_id) = credentials(conn)?;
-    let appid = game_appid(conn, game_id).map_err(|e| e.to_string())?.ok_or("Ce jeu n'est pas lié à Steam.")?;
+    let appid = game_appid(conn, game_id).map_err(|e| e.to_string())?.ok_or(tr("Ce jeu n'est pas lié à Steam.", "This game isn't linked to Steam."))?;
     let list = fetch_achievements(&key, &steam_id, appid)?;
     let wanted = missing_icons(conn, game_id, &list).map_err(|e| e.to_string())?;
     let icons = download_icons(wanted);
@@ -674,7 +679,7 @@ pub fn sync_all(db_path: &Path) -> Result<SyncAllResult, String> {
                 result.new_unlocked += r.new_unlocked;
             }
             Err(e) => {
-                let network = e == NETWORK_ERROR;
+                let network = e == network_error();
                 result.errors.push(format!("{name} : {e}"));
                 if network {
                     break; // pas d'Internet : inutile d'insister pour les autres jeux

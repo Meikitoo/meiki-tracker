@@ -1,6 +1,10 @@
 // Tous les textes de l'interface, en français.
-// Pour ajouter l'anglais plus tard : créer en.ts avec les mêmes clés.
+// La version anglaise (en.ts) a exactement les mêmes clés : TypeScript le vérifie.
 export const fr = {
+  /** Format des dates (Intl). */
+  locale: "fr-FR",
+  /** « 18 novembre 2026 à 21:04 » */
+  dateAt: (date: string, time: string) => `${date} à ${time}`,
   app: {
     name: "MEIKI TRACKER",
     by: "BY MEIKITOOW",
@@ -11,6 +15,7 @@ export const fr = {
   nav: {
     library: "Bibliothèque",
     stats: "Statistiques",
+    recap: "Mon récap",
     settings: "Paramètres",
   },
   tracking: {
@@ -69,6 +74,10 @@ export const fr = {
     privacyText:
       "Meiki Tracker fonctionne sur ton PC : il lit uniquement la liste des programmes ouverts, comme le Gestionnaire des tâches — sans jamais toucher aux jeux. Aucune donnée n'est envoyée sur Internet. Seule exception, si tu l'actives : la synchronisation des succès Steam, qui contacte uniquement les serveurs de Steam pour lire tes succès.",
     cancel: "Annuler",
+    invalidValues: "Vérifie les valeurs : durée minimale et fusion entre 0 et 60 min, AFK entre 1 et 120 min.",
+    language: "Langue",
+    languageLabel: "Langue de l'appli",
+    languageHint: "Interface, notifications et noms des succès Steam.",
   },
   stats: {
     title: "Statistiques",
@@ -142,6 +151,7 @@ export const fr = {
       saving: "Ajout…",
       nameRequired: "Donne un nom au jeu.",
       invalidTime: "Vérifie le temps saisi (minutes entre 0 et 59).",
+      alreadyTracked: "Ce jeu est déjà dans ta bibliothèque.",
     },
   },
   game: {
@@ -222,6 +232,8 @@ export const fr = {
     keyGet: "Obtenir ma clé",
     keySaved: (end: string) => `Clé enregistrée (…${end}). Laisse vide pour la garder.`,
     keyPlaceholder: "32 caractères",
+    keyRequired: "Colle ta clé API Steam.",
+    linkFirst: "Lie d'abord un jeu depuis sa fiche (bloc « Succès Steam »).",
     idLabel: "Compte Steam (SteamID64)",
     idHint: "Nombre de 17 chiffres. Détecté automatiquement depuis Steam sur ce PC.",
     idDetected: (name: string) => `Compte détecté : ${name}`,
@@ -273,7 +285,35 @@ export const fr = {
     unlinkTitle: "Délier ce jeu de Steam ?",
     unlinkText: "Ses succès ne seront plus affichés (tu pourras le relier quand tu veux).",
   },
+  recap: {
+    title: "Mon récap",
+    subtitle: "Ton bilan en image, prêt à partager sur TikTok, X, Instagram ou Discord.",
+    periodLabel: "Période",
+    periods: { week: "Cette semaine", month: "Ce mois-ci", year: "Cette année" },
+    formatLabel: "Format",
+    formats: { square: "Carré", story: "Vertical (stories, TikTok)" },
+    save: "Enregistrer l'image",
+    saveTitle: "Où enregistrer l'image ?",
+    saved: (p: string) => `Image enregistrée : ${p}`,
+    copy: "Copier l'image",
+    copied: "Image copiée : colle-la directement dans Discord, X…",
+    copyFailed: "Copie impossible ici : utilise « Enregistrer l'image ».",
+    empty: "Pas encore de temps de jeu sur cette période : la carte sera presque vide.",
+    // Sur l'image
+    cardPeriod: { week: "MA SEMAINE", month: "MON MOIS", year: "MON ANNÉE" },
+    played: "TEMPS DE JEU",
+    sessions: "Sessions",
+    daysPlayed: "Jours joués",
+    streak: "Jours d'affilée",
+    longest: "Plus longue",
+    topGames: "TOP JEUX",
+    noGames: "Aucune partie sur cette période.",
+    busiest: (day: string, dur: string) => `Plus grosse journée : ${day} (${dur})`,
+    longestOn: (dur: string, game: string) => `Plus longue session : ${dur} sur ${game}`,
+    achievements: (n: number) => (n === 1 ? "🏆 1 succès Steam" : `🏆 ${n} succès Steam`),
+    footer: "Temps de jeu suivi automatiquement avec Meiki Tracker",
+  },
   soon: "Bientôt disponible",
-} as const;
+};
 
 export type Dictionnaire = typeof fr;

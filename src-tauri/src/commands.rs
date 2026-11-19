@@ -5,6 +5,7 @@
 
 use crate::db::{self, AddOutcome};
 use crate::exeinfo;
+use crate::i18n::tr;
 use crate::library::{self, Library};
 use crate::service::TrackerControl;
 use crate::settings::Settings;
@@ -123,7 +124,7 @@ pub async fn describe_exe(path: String, db: State<'_, AppDb>, cache: State<'_, E
         .file_name()
         .map(|f| f.to_string_lossy().to_string())
         .filter(|f| f.to_lowercase().ends_with(".exe"))
-        .ok_or("Choisis un fichier .exe")?;
+        .ok_or(tr("Choisis un fichier .exe", "Pick an .exe file"))?;
     let tracked = tracked_names(&db)?;
     Ok(candidate(&cache, file, Some(path), false, &tracked))
 }
@@ -153,19 +154,19 @@ pub async fn add_game(game: NewGame, app: AppHandle, db: State<'_, AppDb>) -> Re
     let name = game.name.trim();
     let process = game.process_name.trim();
     if name.is_empty() {
-        return Err("Donne un nom au jeu.".into());
+        return Err(tr("Donne un nom au jeu.", "Give the game a name.").into());
     }
     if name.chars().count() > 80 {
-        return Err("Le nom est trop long (80 caractères max).".into());
+        return Err(tr("Le nom est trop long (80 caractères max).", "The name is too long (80 characters max).").into());
     }
     if !process.to_lowercase().ends_with(".exe") {
-        return Err("Programme invalide.".into());
+        return Err(tr("Programme invalide.", "Invalid program.").into());
     }
     if !matches!(game.category.as_str(), "game" | "creation") {
-        return Err("Catégorie invalide.".into());
+        return Err(tr("Catégorie invalide.", "Invalid category.").into());
     }
     if !(0..=MAX_BASELINE_SECS).contains(&game.baseline_secs) {
-        return Err("Temps de départ invalide.".into());
+        return Err(tr("Temps de départ invalide.", "Invalid starting time.").into());
     }
     let icon = game.exe_path.as_deref().and_then(|p| exeinfo::icon_png(Path::new(p)));
 
@@ -177,7 +178,7 @@ pub async fn add_game(game: NewGame, app: AppHandle, db: State<'_, AppDb>) -> Re
     let result = match outcome {
         AddOutcome::Added(id) => AddResult { id, restored: false },
         AddOutcome::Restored(id) => AddResult { id, restored: true },
-        AddOutcome::AlreadyTracked(_) => return Err("Ce jeu est déjà dans ta bibliothèque.".into()),
+        AddOutcome::AlreadyTracked(_) => return Err(tr("Ce jeu est déjà dans ta bibliothèque.", "This game is already in your library.").into()),
     };
     // Jeu installé par Steam : on le lie tout seul (lecture locale des fichiers de Steam).
     if let Some(exe) = game.exe_path.as_deref() {
@@ -211,7 +212,7 @@ fn modify(
         f(&conn).map_err(err)?
     };
     if !changed {
-        return Err("Élément introuvable (déjà supprimé ?).".into());
+        return Err(tr("Élément introuvable (déjà supprimé ?).", "Item not found (already deleted?).").into());
     }
     let _ = app.emit(crate::EVENT_CHANGED, ());
     Ok(())
@@ -220,10 +221,10 @@ fn modify(
 fn clean_name(name: &str) -> Result<String, String> {
     let name = name.trim();
     if name.is_empty() {
-        return Err("Donne un nom au jeu.".into());
+        return Err(tr("Donne un nom au jeu.", "Give the game a name.").into());
     }
     if name.chars().count() > 80 {
-        return Err("Le nom est trop long (80 caractères max).".into());
+        return Err(tr("Le nom est trop long (80 caractères max).", "The name is too long (80 characters max).").into());
     }
     Ok(name.to_string())
 }
@@ -242,7 +243,7 @@ pub async fn rename_game(id: i64, name: String, app: AppHandle, db: State<'_, Ap
 #[tauri::command]
 pub async fn set_baseline(id: i64, secs: i64, app: AppHandle, db: State<'_, AppDb>) -> Result<(), String> {
     if !(0..=MAX_BASELINE_SECS).contains(&secs) {
-        return Err("Temps de départ invalide.".into());
+        return Err(tr("Temps de départ invalide.", "Invalid starting time.").into());
     }
     modify(&app, &db, |c| db::set_baseline(c, id, secs))
 }
@@ -251,7 +252,7 @@ pub async fn set_baseline(id: i64, secs: i64, app: AppHandle, db: State<'_, AppD
 pub async fn set_weekly_limit(id: i64, secs: Option<i64>, app: AppHandle, db: State<'_, AppDb>) -> Result<(), String> {
     let secs = secs.filter(|s| *s > 0);
     if secs.is_some_and(|s| s > 7 * 24 * 3600) {
-        return Err("Une semaine ne compte que 168 heures.".into());
+        return Err(tr("Une semaine ne compte que 168 heures.", "A week only has 168 hours.").into());
     }
     modify(&app, &db, |c| db::set_weekly_limit(c, id, secs))
 }
@@ -293,7 +294,7 @@ pub async fn set_autostart(enabled: bool, app: AppHandle, db: State<'_, AppDb>) 
     use tauri_plugin_autostart::ManagerExt;
     let manager = app.autolaunch();
     let result = if enabled { manager.enable() } else { manager.disable() };
-    result.map_err(|e| format!("Impossible de modifier le lancement au démarrage : {e}"))?;
+    result.map_err(|e| crate::trf!("Impossible de modifier le lancement au démarrage : {e}", "Couldn't change the startup setting: {e}"))?;
     let conn = db.0.lock().map_err(err)?;
     db::set_setting(&conn, "autostart", if enabled { "true" } else { "false" }).map_err(err)
 }
@@ -314,6 +315,8 @@ pub struct SettingsView {
     pub autostart: bool,
     pub last_auto_backup_at: Option<i64>,
     pub suggested_backup_name: String,
+    /// Langue enregistrée (None : jamais choisie).
+    pub language: Option<String>,
 }
 
 #[tauri::command]
@@ -328,6 +331,7 @@ pub async fn get_settings(app: AppHandle, db: State<'_, AppDb>) -> Result<Settin
         autostart,
         last_auto_backup_at,
         suggested_backup_name: crate::backup::suggested_name(db::now()),
+        language: crate::i18n::saved(&conn),
     })
 }
 
@@ -342,13 +346,13 @@ pub struct TrackingSettings {
 #[tauri::command]
 pub async fn update_tracking_settings(s: TrackingSettings, db: State<'_, AppDb>) -> Result<(), String> {
     if !(0..=3600).contains(&s.min_session_secs) {
-        return Err("Durée minimale : entre 0 et 60 minutes.".into());
+        return Err(tr("Durée minimale : entre 0 et 60 minutes.", "Minimum length: between 0 and 60 minutes.").into());
     }
     if s.afk_threshold_secs != 0 && !(60..=7200).contains(&s.afk_threshold_secs) {
-        return Err("Seuil AFK : entre 1 et 120 minutes (ou désactivé).".into());
+        return Err(tr("Seuil AFK : entre 1 et 120 minutes (ou désactivé).", "AFK threshold: between 1 and 120 minutes (or off).").into());
     }
     if !(0..=3600).contains(&s.merge_window_secs) {
-        return Err("Fusion : entre 0 et 60 minutes.".into());
+        return Err(tr("Fusion : entre 0 et 60 minutes.", "Merge: between 0 and 60 minutes.").into());
     }
     let conn = db.0.lock().map_err(err)?;
     db::set_setting(&conn, "min_session_secs", &s.min_session_secs.to_string()).map_err(err)?;
@@ -363,7 +367,7 @@ pub async fn set_backup_dir(path: Option<String>, db: State<'_, AppDb>) -> Resul
     match path.filter(|p| !p.trim().is_empty()) {
         Some(p) => {
             if !Path::new(&p).is_dir() {
-                return Err("Ce dossier n'existe pas.".into());
+                return Err(tr("Ce dossier n'existe pas.", "This folder doesn't exist.").into());
             }
             db::set_setting(&conn, "backup_dir", &p).map_err(err)?;
             // Première sauvegarde tout de suite, pour vérifier que le dossier est utilisable.
@@ -454,20 +458,20 @@ pub async fn set_steam_enabled(enabled: bool, db: State<'_, AppDb>) -> Result<()
 pub async fn save_steam_account(api_key: Option<String>, steam_id: String, db: State<'_, AppDb>) -> Result<steam::AccountCheck, String> {
     let steam_id = steam_id.trim().to_string();
     if !steam::valid_steam_id(&steam_id) {
-        return Err("Identifiant Steam invalide : c'est un nombre de 17 chiffres qui commence par 7656119.".into());
+        return Err(tr("Identifiant Steam invalide : c'est un nombre de 17 chiffres qui commence par 7656119.", "Invalid Steam ID: it's a 17-digit number starting with 7656119.").into());
     }
     let key = match api_key.map(|k| k.trim().to_string()).filter(|k| !k.is_empty()) {
         Some(k) if steam::valid_api_key(&k) => k.to_uppercase(),
-        Some(_) => return Err("Clé API invalide : elle fait 32 caractères (chiffres et lettres A à F).".into()),
+        Some(_) => return Err(tr("Clé API invalide : elle fait 32 caractères (chiffres et lettres A à F).", "Invalid API key: it's 32 characters long (digits and letters A to F).").into()),
         None => {
             let conn = db.0.lock().map_err(err)?;
-            steam::config(&conn).map_err(err)?.api_key.ok_or("Colle ta clé API Steam.")?
+            steam::config(&conn).map_err(err)?.api_key.ok_or(tr("Colle ta clé API Steam.", "Paste your Steam API key."))?
         }
     };
     {
         let conn = db.0.lock().map_err(err)?;
         if !steam::config(&conn).map_err(err)?.enabled {
-            return Err("Active d'abord la synchronisation des succès Steam.".into());
+            return Err(tr("Active d'abord la synchronisation des succès Steam.", "Turn on Steam achievements sync first.").into());
         }
     }
     // Appel réseau sans tenir la base.
@@ -524,7 +528,7 @@ pub struct SteamLinkCandidates {
 pub async fn steam_link_candidates(id: i64, db: State<'_, AppDb>) -> Result<SteamLinkCandidates, String> {
     let process = {
         let conn = db.0.lock().map_err(err)?;
-        db::get_game(&conn, id).map_err(err)?.ok_or("Jeu introuvable.")?.process_name
+        db::get_game(&conn, id).map_err(err)?.ok_or(tr("Jeu introuvable.", "Game not found."))?.process_name
     };
     let installed = steam::installed_games();
     let detected = steam::appid_for_process(&process, &installed);
@@ -536,12 +540,12 @@ pub async fn steam_link_candidates(id: i64, db: State<'_, AppDb>) -> Result<Stea
 #[tauri::command]
 pub async fn link_steam_game(id: i64, appid: Option<u32>, app: AppHandle, db: State<'_, AppDb>) -> Result<Option<steam::SyncResult>, String> {
     if appid == Some(0) {
-        return Err("Numéro de jeu Steam invalide.".into());
+        return Err(tr("Numéro de jeu Steam invalide.", "Invalid Steam game number.").into());
     }
     let enabled = {
         let conn = db.0.lock().map_err(err)?;
         if !steam::set_game_appid(&conn, id, appid).map_err(err)? {
-            return Err("Jeu introuvable.".into());
+            return Err(tr("Jeu introuvable.", "Game not found.").into());
         }
         steam::config(&conn).map_err(err)?.enabled
     };
@@ -552,4 +556,44 @@ pub async fn link_steam_game(id: i64, appid: Option<u32>, app: AppHandle, db: St
     let r = steam::sync_game(&db::default_db_path(), id)?;
     let _ = app.emit(crate::EVENT_CHANGED, ());
     Ok(Some(r))
+}
+
+// ------------------------------------------------------------------ Langue
+
+/// Langue de l'appli ("fr" ou "en") : textes Rust, menu de l'icône, nom des succès Steam.
+#[tauri::command]
+pub async fn set_language(lang: String, app: AppHandle, db: State<'_, AppDb>) -> Result<(), String> {
+    if lang != "fr" && lang != "en" {
+        return Err("Langue inconnue / Unknown language".into());
+    }
+    {
+        let conn = db.0.lock().map_err(err)?;
+        db::set_setting(&conn, crate::i18n::KEY_LANGUAGE, &lang).map_err(err)?;
+    }
+    crate::i18n::set(&lang);
+    crate::desktop::refresh_tray_texts(&app);
+    Ok(())
+}
+
+// ------------------------------------------------------------------ Mon récap
+
+#[tauri::command]
+pub async fn get_recap(period: String, db: State<'_, AppDb>) -> Result<crate::recap::Recap, String> {
+    let p = crate::recap::Period::parse(&period).ok_or("Période inconnue / Unknown period")?;
+    let conn = db.0.lock().map_err(err)?;
+    crate::recap::build(&conn, p, db::now()).map_err(err)
+}
+
+/// Enregistre l'image du récap (PNG encodé en base64 par l'interface).
+#[tauri::command]
+pub async fn save_png(path: String, data: String) -> Result<(), String> {
+    use base64::Engine;
+    if !path.to_lowercase().ends_with(".png") {
+        return Err(tr("Le fichier doit se terminer par .png", "The file must end with .png").into());
+    }
+    let bytes = base64::engine::general_purpose::STANDARD.decode(data.as_bytes()).map_err(err)?;
+    if !bytes.starts_with(&[0x89, b'P', b'N', b'G']) || bytes.len() > 20 * 1024 * 1024 {
+        return Err(tr("Image invalide.", "Invalid image.").into());
+    }
+    std::fs::write(&path, bytes).map_err(|e| crate::trf!("Impossible d'enregistrer l'image : {e}", "Couldn't save the image: {e}"))
 }

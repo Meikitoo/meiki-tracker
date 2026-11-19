@@ -7,6 +7,7 @@
   const links = [
     { href: "/", label: t.nav.library, icon: "grid" },
     { href: "/statistiques", label: t.nav.stats, icon: "chart" },
+    { href: "/recap", label: t.nav.recap, icon: "share" },
     { href: "/parametres", label: t.nav.settings, icon: "gear" },
   ] as const;
 
@@ -46,6 +47,8 @@
             <rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
           {:else if l.icon === "chart"}
             <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+          {:else if l.icon === "share"}
+            <path d="M12 3v12M7 8l5-5 5 5" /><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
           {:else}
             <circle cx="12" cy="12" r="3" />
             <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" />

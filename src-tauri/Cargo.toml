@@ -1,6 +1,6 @@
 [package]
 name = "meiki-tracker"
-version = "1.1.0"
+version = "1.2.0"
 description = "Suivi du temps de jeu, 100 % local"
 authors = ["Meikitoow"]
 edition = "2024"
@@ -43,3 +43,13 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# Outil console de debug : jamais compilé dans l'installateur.
+# cargo run --bin meiki-debug --features outil-debug
+[features]
+outil-debug = []
+
+[[bin]]
+name = "meiki-debug"
+path = "src/bin/meiki-debug.rs"
+required-features = ["outil-debug"]

@@ -3,6 +3,7 @@
 //! notifications de fin de session.
 
 use crate::db;
+use crate::i18n::tr;
 use crate::service::{self, TrackerControl};
 use crate::settings::Settings;
 use crate::tracker::TrackerEvent;
@@ -18,15 +19,23 @@ pub const TRAY_ID: &str = "main";
 /// Argument passé par le lancement automatique avec Windows : démarrer caché.
 pub const ARG_MINIMIZED: &str = "--minimized";
 
-/// Élément « Mettre en pause / Reprendre » du menu, gardé pour changer son texte.
-struct PauseItem(MenuItem<Wry>);
+/// Éléments du menu, gardés pour changer leur texte (pause, langue).
+struct TrayItems {
+    open: MenuItem<Wry>,
+    pause: MenuItem<Wry>,
+    quit: MenuItem<Wry>,
+}
 
 /// Dernière infobulle affichée (évite de la redéfinir toutes les 5 s).
 #[derive(Default)]
 pub struct TrayTooltip(Mutex<String>);
 
 fn pause_label(paused: bool) -> &'static str {
-    if paused { "Reprendre le tracking" } else { "Mettre en pause le tracking" }
+    if paused {
+        tr("Reprendre le tracking", "Resume tracking")
+    } else {
+        tr("Mettre en pause le tracking", "Pause tracking")
+    }
 }
 
 pub fn show_main_window(app: &AppHandle) {
@@ -40,20 +49,38 @@ pub fn show_main_window(app: &AppHandle) {
 pub fn set_paused(app: &AppHandle, paused: bool) {
     let control = app.state::<TrackerControl>();
     control.paused.store(paused, Ordering::Relaxed);
-    if let Some(item) = app.try_state::<PauseItem>() {
-        let _ = item.0.set_text(pause_label(paused));
+    if let Some(items) = app.try_state::<TrayItems>() {
+        let _ = items.pause.set_text(pause_label(paused));
     }
     // L'interface recharge et affiche le nouvel état.
     let _ = app.emit(crate::EVENT_CHANGED, ());
 }
 
+fn open_label() -> &'static str {
+    tr("Ouvrir Meiki Tracker", "Open Meiki Tracker")
+}
+
+fn quit_label() -> &'static str {
+    tr("Quitter", "Quit")
+}
+
+/// Remet les textes du menu dans la langue active (après un changement de langue).
+pub fn refresh_tray_texts(app: &AppHandle) {
+    let paused = app.state::<TrackerControl>().paused.load(Ordering::Relaxed);
+    if let Some(items) = app.try_state::<TrayItems>() {
+        let _ = items.open.set_text(open_label());
+        let _ = items.pause.set_text(pause_label(paused));
+        let _ = items.quit.set_text(quit_label());
+    }
+}
+
 pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Ouvrir Meiki Tracker", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", open_label(), true, None::<&str>)?;
     let pause = MenuItem::with_id(app, "pause", pause_label(false), true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quitter", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", quit_label(), true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(app, &[&open, &pause, &sep, &quit])?;
-    app.manage(PauseItem(pause));
+    app.manage(TrayItems { open, pause, quit });
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip("Meiki Tracker")
@@ -93,8 +120,11 @@ pub fn on_close_requested(app: &AppHandle) {
         let _ = db::set_setting(&conn, "tray_hint_shown", "true");
         notify(
             app,
-            "Meiki Tracker continue en arrière-plan",
-            "Le suivi reste actif. Retrouve l'appli dans la zone de notification, près de l'horloge.",
+            tr("Meiki Tracker continue en arrière-plan", "Meiki Tracker keeps running in the background"),
+            tr(
+                "Le suivi reste actif. Retrouve l'appli dans la zone de notification, près de l'horloge.",
+                "Tracking stays on. Find the app in the notification area, next to the clock.",
+            ),
         );
     }
 }
@@ -108,10 +138,10 @@ pub fn moment_of_day(ts: i64) -> &'static str {
     use chrono::{Local, TimeZone, Timelike};
     let hour = Local.timestamp_opt(ts, 0).single().map(|d| d.hour()).unwrap_or(20);
     match hour {
-        5..=11 => "ce matin",
-        12..=17 => "cet après-midi",
-        18..=23 => "ce soir",
-        _ => "cette nuit",
+        5..=11 => tr("ce matin", "this morning"),
+        12..=17 => tr("cet après-midi", "this afternoon"),
+        18..=23 => tr("ce soir", "this evening"),
+        _ => tr("cette nuit", "tonight"),
     }
 }
 
@@ -123,8 +153,9 @@ pub fn on_tracker_events(app: &AppHandle, conn: &Connection, events: &[TrackerEv
         if let TrackerEvent::Ended { game_id, net_secs } = e {
             if settings.notifications && *net_secs >= settings.min_session_secs {
                 if let Ok(Some(g)) = db::get_game(conn, *game_id) {
-                    let body = format!("{} : {} {}", g.name, service::fmt_duration(*net_secs), moment_of_day(db::now()));
-                    notify(app, "Session terminée", &body);
+                    let (name, dur, when) = (g.name, service::fmt_duration(*net_secs), moment_of_day(db::now()));
+                    let body = crate::trf!("{name} : {dur} {when}", "{name}: {dur} {when}");
+                    notify(app, tr("Session terminée", "Session over"), &body);
                 }
             }
             // Jeu Steam fermé : on récupère les succès gagnés pendant la partie.
@@ -152,12 +183,13 @@ fn spawn_steam_game_sync(app: &AppHandle, conn: &Connection, game_id: i64) {
                     let notifications = conn.as_ref().ok().and_then(|c| Settings::load(c).ok()).map(|s| s.notifications).unwrap_or(true);
                     let name = conn.ok().and_then(|c| db::get_game(&c, game_id).ok().flatten()).map(|g| g.name).unwrap_or_default();
                     if notifications {
-                        let body = if r.new_unlocked == 1 {
-                            format!("{name} : 1 nouveau succès débloqué ({}/{})", r.unlocked, r.total)
+                        let (n, u, t) = (r.new_unlocked, r.unlocked, r.total);
+                        let body = if n == 1 {
+                            crate::trf!("{name} : 1 nouveau succès débloqué ({u}/{t})", "{name}: 1 new achievement unlocked ({u}/{t})")
                         } else {
-                            format!("{name} : {} nouveaux succès débloqués ({}/{})", r.new_unlocked, r.unlocked, r.total)
+                            crate::trf!("{name} : {n} nouveaux succès débloqués ({u}/{t})", "{name}: {n} new achievements unlocked ({u}/{t})")
                         };
-                        notify(&app, "Succès Steam", &body);
+                        notify(&app, tr("Succès Steam", "Steam achievements"), &body);
                     }
                 }
             }
@@ -192,11 +224,14 @@ pub fn spawn_steam_startup_sync(app: AppHandle, db_path: std::path::PathBuf) {
 /// Infobulle de l'icône : « Meiki Tracker — En jeu : Call of Duty ».
 pub fn update_tooltip(app: &AppHandle, live_names: &[String], paused: bool) {
     let text = if paused {
-        "Meiki Tracker — tracking en pause".to_string()
+        tr("Meiki Tracker — tracking en pause", "Meiki Tracker — tracking paused").to_string()
     } else if live_names.is_empty() {
-        "Meiki Tracker — tracking actif".to_string()
+        tr("Meiki Tracker — tracking actif", "Meiki Tracker — tracking on").to_string()
     } else {
-        format!("Meiki Tracker — En jeu : {}", live_names.join(", "))
+        {
+        let names = live_names.join(", ");
+        crate::trf!("Meiki Tracker — En jeu : {names}", "Meiki Tracker — Playing: {names}")
+    }
     };
     let state = app.state::<TrayTooltip>();
     let Ok(mut last) = state.0.lock() else { return };

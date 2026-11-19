@@ -96,7 +96,7 @@ export async function browseExe(dialogTitle: string): Promise<ProgramCandidate |
     title: dialogTitle,
     multiple: false,
     directory: false,
-    filters: [{ name: "Programme", extensions: ["exe"] }],
+    filters: [{ name: "Programme / Program", extensions: ["exe"] }],
   });
   if (!path) return null;
   return invoke<ProgramCandidate>("describe_exe", { path });
@@ -186,6 +186,7 @@ export interface SettingsView {
   autostart: boolean;
   lastAutoBackupAt: number | null;
   suggestedBackupName: string;
+  language: "fr" | "en" | null;
 }
 
 export async function getSettings(): Promise<SettingsView> {
@@ -195,6 +196,7 @@ export async function getSettings(): Promise<SettingsView> {
       autostart: false,
       lastAutoBackupAt: null,
       suggestedBackupName: "meiki-tracker.meikibackup",
+      language: null,
     };
   }
   return invoke<SettingsView>("get_settings");
@@ -202,9 +204,10 @@ export async function getSettings(): Promise<SettingsView> {
 
 export const updateTrackingSettings = (s: { minSessionSecs: number; afkThresholdSecs: number; mergeWindowSecs: number }) =>
   mutate("update_tracking_settings", { s });
+export const setLanguage = (lang: "fr" | "en") => mutate("set_language", { lang });
 export const setBackupDir = (path: string | null) => mutate("set_backup_dir", { path });
 
-const BACKUP_FILTER = [{ name: "Sauvegarde Meiki Tracker", extensions: ["meikibackup"] }];
+const BACKUP_FILTER = [{ name: "Meiki Tracker backup", extensions: ["meikibackup"] }];
 
 /** Exporte vers un fichier choisi par l'utilisateur. Renvoie le chemin, ou null si annulé. */
 export async function exportBackup(title: string, defaultName: string): Promise<string | null> {
@@ -329,6 +332,56 @@ export async function openWeb(url: string): Promise<void> {
   }
   const { openUrl } = await import("@tauri-apps/plugin-opener");
   await openUrl(url);
+}
+
+// ------------------------------------------------------------------ Mon récap
+
+export type RecapPeriod = "week" | "month" | "year";
+
+export interface Recap {
+  start: number;
+  end: number;
+  totalSecs: number;
+  sessionCount: number;
+  daysPlayed: number;
+  bestStreak: number;
+  topGames: { id: number; name: string; secs: number }[];
+  longest: { gameName: string; secs: number; startedAt: number } | null;
+  busiestDay: { dayStart: number; secs: number } | null;
+  tags: { tag: string; secs: number }[];
+  achievements: number;
+}
+
+export async function getRecap(period: RecapPeriod): Promise<Recap> {
+  if (!inTauri) {
+    const lib = (await mock()).mockLibrary();
+    const now = Math.floor(Date.now() / 1000);
+    const top = [...lib.games].sort((a, b) => b.weekSecs - a.weekSecs).slice(0, 5);
+    return {
+      start: lib.summary.weekStart,
+      end: now,
+      totalSecs: lib.summary.weekSecs,
+      sessionCount: 9,
+      daysPlayed: 5,
+      bestStreak: 4,
+      topGames: top.map((g) => ({ id: g.id, name: g.name, secs: g.weekSecs })),
+      longest: { gameName: top[0]?.name ?? "", secs: 4 * 3600 + 12 * 60, startedAt: now - 86400 },
+      busiestDay: { dayStart: now - 2 * 86400, secs: 6 * 3600 },
+      tags: [{ tag: "Ranked", secs: 9 * 3600 }, { tag: "Fun", secs: 4 * 3600 }],
+      achievements: 3,
+    };
+  }
+  return invoke<Recap>("get_recap", { period });
+}
+
+/** Enregistre un PNG (en base64) à l'endroit choisi. Renvoie le chemin, ou null si annulé. */
+export async function saveRecapImage(title: string, defaultName: string, base64: string): Promise<string | null> {
+  if (!inTauri) return null;
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const path = await save({ title, defaultPath: defaultName, filters: [{ name: "PNG", extensions: ["png"] }] });
+  if (!path) return null;
+  await invoke("save_png", { path, data: base64 });
+  return path;
 }
 
 export async function getGameIcon(id: number): Promise<string | null> {

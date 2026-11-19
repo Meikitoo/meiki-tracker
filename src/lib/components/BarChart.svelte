@@ -37,7 +37,7 @@
     return new Date(ts * 1000).getDate();
   }
   function weekdayLetter(ts: number) {
-    return new Intl.DateTimeFormat("fr-FR", { weekday: "narrow" }).format(new Date(ts * 1000));
+    return new Intl.DateTimeFormat(t.locale, { weekday: "narrow" }).format(new Date(ts * 1000));
   }
 </script>
 
