@@ -1,6 +1,6 @@
 [package]
 name = "meiki-tracker"
-version = "1.2.0"
+version = "1.3.0"
 description = "Suivi du temps de jeu, 100 % local"
 authors = ["Meikitoow"]
 edition = "2024"
@@ -34,6 +34,8 @@ tauri-plugin-autostart = "2"
 tauri-plugin-notification = "2"
 ureq = { version = "3", features = ["json"] }
 tauri-plugin-opener = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

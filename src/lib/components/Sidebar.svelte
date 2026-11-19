@@ -3,6 +3,9 @@
   import { setTrackingPaused } from "$lib/api";
   import { t } from "$lib/i18n";
   import { library } from "$lib/stores/library.svelte";
+  import { updates } from "$lib/stores/update.svelte";
+  import { openWeb } from "$lib/api";
+  import { DONATE_URL } from "$lib/links";
 
   const links = [
     { href: "/", label: t.nav.library, icon: "grid" },
@@ -58,6 +61,15 @@
       </a>
     {/each}
   </nav>
+
+  <div class="spacer"></div>
+
+  {#if updates.status === "available" && updates.version}
+    <a class="update" href="/parametres#a-propos">{t.tracking.updateAvailable(updates.version)}</a>
+  {/if}
+  {#if DONATE_URL}
+    <button class="support" type="button" onclick={() => openWeb(DONATE_URL)}>♥ {t.tracking.support}</button>
+  {/if}
 
   <div class="status" class:paused={library.paused}>
     <div class="status-head">
@@ -151,8 +163,41 @@
     stroke-linecap: round;
     stroke-linejoin: round;
   }
+  .spacer {
+    flex: 1;
+    margin-bottom: -16px;
+  }
+  .update,
+  .support {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 13px;
+    text-align: center;
+    padding: 0 10px;
+    margin-bottom: -16px;
+  }
+  .update {
+    background: var(--accent-bg);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+  }
+  .support {
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    color: var(--text-2);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .support:hover {
+    border-color: #ff8a96;
+    color: #ff8a96;
+  }
   .status {
-    margin-top: auto;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);

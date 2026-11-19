@@ -187,6 +187,7 @@ export interface SettingsView {
   lastAutoBackupAt: number | null;
   suggestedBackupName: string;
   language: "fr" | "en" | null;
+  updateCheck: boolean;
 }
 
 export async function getSettings(): Promise<SettingsView> {
@@ -197,6 +198,7 @@ export async function getSettings(): Promise<SettingsView> {
       lastAutoBackupAt: null,
       suggestedBackupName: "meiki-tracker.meikibackup",
       language: null,
+      updateCheck: false,
     };
   }
   return invoke<SettingsView>("get_settings");
@@ -204,6 +206,7 @@ export async function getSettings(): Promise<SettingsView> {
 
 export const updateTrackingSettings = (s: { minSessionSecs: number; afkThresholdSecs: number; mergeWindowSecs: number }) =>
   mutate("update_tracking_settings", { s });
+export const setUpdateCheck = (enabled: boolean) => mutate("set_update_check", { enabled });
 export const setLanguage = (lang: "fr" | "en") => mutate("set_language", { lang });
 export const setBackupDir = (path: string | null) => mutate("set_backup_dir", { path });
 

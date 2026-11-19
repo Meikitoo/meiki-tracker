@@ -15,6 +15,7 @@
   } from "$lib/api";
   import Modal from "$lib/components/Modal.svelte";
   import SteamSettings from "$lib/components/SteamSettings.svelte";
+  import AboutSettings from "$lib/components/AboutSettings.svelte";
   import Toggle from "$lib/components/Toggle.svelte";
   import { fmtDate, fmtTime } from "$lib/format";
   import { LANGS, lang, rememberLang, t, type Lang } from "$lib/i18n";
@@ -280,6 +281,8 @@
     <h2>{T.privacy}</h2>
     <p class="privacy">{T.privacyText}</p>
   </section>
+
+  <AboutSettings updateCheck={view.updateCheck} onchanged={load} />
 {/if}
 
 <Modal bind:open={confirmImport} title={T.importConfirmTitle}>

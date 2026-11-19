@@ -44,6 +44,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(commands::ExeCache::default())
         .manage(desktop::TrayTooltip::default())
         .setup(|app| {
@@ -118,6 +120,7 @@ pub fn run() {
             commands::import_backup,
             commands::get_overview,
             commands::set_language,
+            commands::set_update_check,
             commands::get_recap,
             commands::save_png,
             commands::get_steam_settings,

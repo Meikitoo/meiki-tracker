@@ -5,13 +5,16 @@
   import { library } from "$lib/stores/library.svelte";
   import { getSettings, inTauri, setLanguage } from "$lib/api";
   import { lang, rememberLang } from "$lib/i18n";
+  import { updates } from "$lib/stores/update.svelte";
 
   // La langue enregistrée dans la base fait foi (ex. : après un import ou une
   // réinstallation). Premier lancement : on y enregistre la langue détectée.
   async function syncLanguage() {
     if (!inTauri) return;
     try {
-      const saved = (await getSettings()).language;
+      const s = await getSettings();
+      if (s.updateCheck) updates.check();
+      const saved = s.language;
       if (!saved) await setLanguage(lang);
       else if (saved !== lang) {
         rememberLang(saved);

@@ -8,3 +8,9 @@ node_modules
 !.env.example
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Versions préparées par scripts/release.mjs (publiées sur GitHub, pas dans le dépôt)
+/release
+
+# Clés de signature : jamais dans le dépôt
+*.key

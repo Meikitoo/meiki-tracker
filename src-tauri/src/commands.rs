@@ -317,6 +317,8 @@ pub struct SettingsView {
     pub suggested_backup_name: String,
     /// Langue enregistrée (None : jamais choisie).
     pub language: Option<String>,
+    /// Recherche de mises à jour au démarrage (désactivée par défaut : elle contacte GitHub).
+    pub update_check: bool,
 }
 
 #[tauri::command]
@@ -332,6 +334,7 @@ pub async fn get_settings(app: AppHandle, db: State<'_, AppDb>) -> Result<Settin
         last_auto_backup_at,
         suggested_backup_name: crate::backup::suggested_name(db::now()),
         language: crate::i18n::saved(&conn),
+        update_check: db::get_setting(&conn, "update_check").map_err(err)?.as_deref() == Some("true"),
     })
 }
 
@@ -596,4 +599,11 @@ pub async fn save_png(path: String, data: String) -> Result<(), String> {
         return Err(tr("Image invalide.", "Invalid image.").into());
     }
     std::fs::write(&path, bytes).map_err(|e| crate::trf!("Impossible d'enregistrer l'image : {e}", "Couldn't save the image: {e}"))
+}
+
+/// Recherche automatique des mises à jour au démarrage (option).
+#[tauri::command]
+pub async fn set_update_check(enabled: bool, db: State<'_, AppDb>) -> Result<(), String> {
+    let conn = db.0.lock().map_err(err)?;
+    db::set_setting(&conn, "update_check", if enabled { "true" } else { "false" }).map_err(err)
 }
