@@ -52,8 +52,8 @@ Elles sont signées : l'appli refuse tout fichier qui ne vient pas du projet.
 
 ## Soutenir
 
-Meiki Tracker est gratuit. Si l'appli te plaît, tu peux soutenir le projet
-(le lien de don arrive bientôt), le partager, ou poster ton récap avec **#MeikiTracker**.
+Meiki Tracker est gratuit. Si l'appli te plaît, tu peux soutenir le projet sur
+[**☕ Ko-fi**](https://ko-fi.com/meikitoow17), le partager, ou poster ton récap avec **#MeikiTracker**.
 
 ## Succès Steam (option)
 
@@ -82,6 +82,7 @@ Free, open source, for Windows.
   with your own Steam API key) and update checks (GitHub, on click or on startup if you enable it).
 - **No lost time**: the running session is saved every 5 s and recovered after a crash.
 - **Lightweight**: one check every 5 s.
+- **Support the project**: [☕ Ko-fi](https://ko-fi.com/meikitoow17) — or share your recap with **#MeikiTracker**.
 - Features: AFK removal, session merging, weekly limits, tags and notes, shareable **recap** images,
   Steam achievements, backups, tray icon, start with Windows. French and English.
 

@@ -9,4 +9,4 @@ export const RELEASES_URL = `${REPO_URL}/releases`;
  * Lien de don (Ko-fi, PayPal, Tipeee…). Vide : le bouton « Soutenir » est masqué.
  * Pour l'activer : mettre l'adresse ici ET l'ajouter dans capabilities/default.json.
  */
-export const DONATE_URL = "";
+export const DONATE_URL = "https://ko-fi.com/meikitoow17";
